@@ -87,8 +87,8 @@ test.describe('Parametric Shelf Creator', () => {
   });
 
   test('View Controls: Switching views updates the scene', async ({ page }) => {
-    // Get the view buttons from the Full Shelf Preview section
-    const previewCard = page.locator('.card').filter({ hasText: 'Full Shelf Preview' });
+    // Get the view buttons from the Full Shelf Editor section
+    const previewCard = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
     
     // Click through different view modes
     await previewCard.getByRole('button', { name: 'Top' }).click();
