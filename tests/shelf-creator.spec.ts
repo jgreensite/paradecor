@@ -7,11 +7,11 @@ test.describe('Parametric Shelf Creator - UI Integrity', () => {
   });
 
   test('Page loads without crash', async ({ page }) => {
-    await expect(page).toHaveTitle(/Ribform/);
+    await expect(page).toHaveTitle(/Rybform/);
   });
 
   test('Navigation exists', async ({ page }) => {
-    await expect(page.getByText('Ribform')).toHaveCount(2);
+    await expect(page.getByText('Rybform')).toHaveCount(2);
   });
 
   test('Hero section visible', async ({ page }) => {
@@ -41,16 +41,16 @@ test.describe('Parametric Shelf Creator - UI Integrity', () => {
     await expect(page.getByRole('button', { name: /Freeform/i })).toBeVisible();
   });
 
-  test('View mode buttons exist in Single Rib Editor', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+  test('View mode buttons exist in Single Ryb Editor', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     await expect(section.getByRole('button', { name: '3D' })).toBeVisible();
     await expect(section.getByRole('button', { name: 'Top' })).toBeVisible();
     await expect(section.getByRole('button', { name: 'Front' })).toBeVisible();
     await expect(section.getByRole('button', { name: 'Side' })).toBeVisible();
   });
 
-  test('View mode buttons exist in Full Shelf Editor', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+  test('View mode buttons exist in Full Ryb Editor', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await expect(section.getByRole('button', { name: '3D' })).toBeVisible();
     await expect(section.getByRole('button', { name: 'Top' })).toBeVisible();
     await expect(section.getByRole('button', { name: 'Front' })).toBeVisible();
@@ -106,56 +106,56 @@ test.describe('Parametric Shelf Creator - View Controls', () => {
   });
 
   test('Single Rib: 3D view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     await section.getByRole('button', { name: '3D' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Single Rib: Top view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     await section.getByRole('button', { name: 'Top' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Single Rib: Front view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     await section.getByRole('button', { name: 'Front' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Single Rib: Side view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     await section.getByRole('button', { name: 'Side' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Full Shelf: 3D view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: '3D' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Full Shelf: Top view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: 'Top' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Full Shelf: Front view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: 'Front' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Full Shelf: Side view works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: 'Side' }).click();
     await page.waitForTimeout(300);
   });
 
   test('Views can be switched independently', async ({ page }) => {
-    const ribSection = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
-    const shelfSection = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const ribSection = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
+    const shelfSection = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     
     await ribSection.getByRole('button', { name: 'Top' }).click();
     await page.waitForTimeout(200);
@@ -293,21 +293,21 @@ test.describe('Parametric Shelf Creator - Dimension Controls', () => {
   });
 
   test('X dimension in Single Rib is editable', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const xInput = section.locator('input[type="number"]').first();
     await xInput.fill('5');
     await page.waitForTimeout(300);
   });
 
   test('Y dimension in Single Rib is editable', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const yInput = section.locator('input[type="number"]').nth(1);
     await yInput.fill('4');
     await page.waitForTimeout(300);
   });
 
   test('Z dimension in Single Rib is editable', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const zInput = section.locator('input[type="number"]').nth(2);
     await zInput.fill('2');
     await page.waitForTimeout(300);
@@ -342,21 +342,21 @@ test.describe('Parametric Shelf Creator - Dimension Controls', () => {
   });
 
   test('Rotate X slider works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const rotateX = section.locator('input[type="range"]').nth(3);
     await rotateX.fill('90');
     await page.waitForTimeout(300);
   });
 
   test('Rotate Y slider works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const rotateY = section.locator('input[type="range"]').nth(4);
     await rotateY.fill('45');
     await page.waitForTimeout(300);
   });
 
   test('Rotate Z slider works', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const rotateZ = section.locator('input[type="range"]').nth(5);
     await rotateZ.fill('180');
     await page.waitForTimeout(300);
@@ -398,7 +398,7 @@ test.describe('Parametric Shelf Creator - State Sync', () => {
   });
 
   test('Physical dimension updates factor', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const xInput = section.locator('input[type="number"]').first();
     const factorSlider = section.locator('input[type="range"]').first();
     
@@ -410,7 +410,7 @@ test.describe('Parametric Shelf Creator - State Sync', () => {
   });
 
   test('Different dimensions are independent', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const xInput = section.locator('input[type="number"]').first();
     const yInput = section.locator('input[type="number"]').nth(1);
     
@@ -551,13 +551,13 @@ test.describe('Parametric Shelf Creator - Visual Regression', () => {
   });
 
   test('Top view screenshot', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: 'Top' }).click();
     await page.waitForTimeout(500);
   });
 
   test('Side view screenshot', async ({ page }) => {
-    const section = page.locator('.card').filter({ hasText: 'Full Shelf Editor' });
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: 'Side' }).click();
     await page.waitForTimeout(500);
   });

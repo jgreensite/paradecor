@@ -718,7 +718,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-charcoal text-cream flex items-center justify-center font-display text-xl">P</div>
-            <span className="font-display text-2xl text-charcoal">Ribform</span>
+            <span className="font-display text-2xl text-charcoal">Rybform</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <button onClick={() => setActiveSection('design')} className={`text-sm tracking-wide transition-colors ${activeSection === 'design' ? 'text-charcoal' : 'text-warm-gray hover:text-stone'}`}>Designer</button>
@@ -767,7 +767,7 @@ function App() {
             <div className="mb-8">
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display text-base text-charcoal">Single Rib Editor</h3>
+                  <h3 className="font-display text-base text-charcoal">Single Ryb Editor</h3>
                   <div className="flex gap-1 bg-cream rounded-lg p-1">
                     {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
                       <button key={mode} onClick={() => setRibViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${ribViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
@@ -827,7 +827,7 @@ function App() {
                 </div>
                 
                 <div className="card">
-                  <h3 className="font-display text-base text-charcoal mb-4">Rib Shape</h3>
+                  <h3 className="font-display text-base text-charcoal mb-4">Ryb Shape</h3>
                   <div className="grid grid-cols-2 gap-2">
                     {RIB_SHAPES.map((shape) => (
                       <button key={shape.id} onClick={() => { handleParamChange('ribShape', shape.id); if (shape.id === 'freeform') setShowFreeformDrawer(true) }} className={`p-3 text-center text-sm rounded-lg transition-all ${params.ribShape === shape.id ? 'bg-charcoal text-cream' : 'bg-cream text-charcoal hover:bg-stone/10'}`}>
@@ -868,7 +868,7 @@ function App() {
                 <div className="sticky top-24">
                   <div className="card h-full min-h-[450px] flex flex-col">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-display text-base text-charcoal">Full Shelf Editor</h3>
+                      <h3 className="font-display text-base text-charcoal">Full Ryb Editor</h3>
                       <div className="flex gap-1 bg-cream rounded-lg p-1">
                         {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
                           <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
@@ -1007,7 +1007,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-charcoal text-cream flex items-center justify-center font-display text-lg">R</div>
-            <span className="font-display text-xl">Ribform</span>
+            <span className="font-display text-xl">Rybform</span>
           </div>
           <p className="text-cream/50 text-sm">Parametric rib-based furniture</p>
         </div>

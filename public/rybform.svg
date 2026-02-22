@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="rybGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#C67B5C"/>
+      <stop offset="100%" style="stop-color:#8B5A3C"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="6" fill="#2C2A26"/>
+  <g fill="none" stroke="url(#rybGradient)" stroke-width="3" stroke-linecap="round">
+    <path d="M7 24 Q7 16 10 8 Q13 16 13 24"/>
+    <path d="M14 26 Q14 16 17 6 Q20 16 20 26"/>
+    <path d="M21 24 Q21 14 24 6 Q27 14 27 24"/>
+  </g>
+</svg>
