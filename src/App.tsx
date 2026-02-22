@@ -341,7 +341,7 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   return { geometries, positions, rotations }
 }
 
-function Rods({ positions, rodDiameterMM, depthMM, rodCount = 1 }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number, rodCount?: number }) {
+function Rods({ positions, rodDiameterMM, depthMM, rodCount = 1, flatEdge = true }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number, rodCount?: number, flatEdge?: boolean }) {
   const rodLength = 80
   
   return (
@@ -349,19 +349,17 @@ function Rods({ positions, rodDiameterMM, depthMM, rodCount = 1 }: { positions: 
       {positions.map((pos, ribIndex) => (
         <group key={ribIndex}>
           {Array.from({ length: rodCount }).map((_, rodIndex) => {
-            const spacing = rodCount > 1 ? (depthMM * 0.6) / (rodCount - 1) : 0
-            const offset = rodCount > 1 ? -depthMM * 0.3 : 0
-            const zPos = offset + rodIndex * spacing
+            const spacing = rodCount > 1 ? depthMM / (rodCount + 1) : 0
+            const zOffset = rodCount > 1 ? spacing * (rodIndex + 1) : depthMM * 0.1
+            const wallOffset = flatEdge ? depthMM * 0.1 : 0
+            const zPos = -wallOffset - (rodCount > 1 ? zOffset : depthMM * 0.1)
             return (
-              <mesh 
-                key={rodIndex} 
-                position={[pos.x, pos.y, zPos]} 
-                rotation={[Math.PI / 2, 0, 0]} 
-                castShadow
-              >
-                <cylinderGeometry args={[rodDiameterMM / 2, rodDiameterMM / 2, rodLength, 12]} />
-                <meshStandardMaterial color="#4A4744" metalness={0.8} roughness={0.2} />
-              </mesh>
+              <group key={rodIndex} position={[pos.x, pos.y, zPos]}>
+                <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
+                  <cylinderGeometry args={[rodDiameterMM / 2, rodDiameterMM / 2, rodLength, 12]} />
+                  <meshStandardMaterial color="#4A4744" metalness={0.8} roughness={0.2} />
+                </mesh>
+              </group>
             )
           })}
         </group>
@@ -406,47 +404,21 @@ function calculateShelfBoundingBox(params: ShelfParams): { width: number, height
   }
 }
 
-function ZoomToFit({ boundingBox, viewMode }: { boundingBox: { width: number, height: number, depth: number, center?: THREE.Vector3 }, viewMode: ViewMode }) {
-  const { camera, size } = useThree()
+function ZoomToFit({ boundingBox, viewMode, target }: { boundingBox: { width: number, height: number, depth: number, center?: THREE.Vector3 }, viewMode: ViewMode, target?: THREE.Vector3 }) {
+  const { camera } = useThree()
   
   useEffect(() => {
-    if (viewMode === '3d') {
-      const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)
-      const fov = (camera as THREE.PerspectiveCamera).fov || 50
-      const aspect = size.width / size.height
-      
-      const distance = (maxDim / 2) / Math.tan((fov * Math.PI / 180) / 2) * 2
-      const cameraPos = new THREE.Vector3(
-        boundingBox.center?.x || distance * 0.5,
-        boundingBox.center?.y || distance * 0.3,
-        distance
-      )
-      
-      camera.position.copy(cameraPos)
-      camera.lookAt(boundingBox.center?.x || 0, boundingBox.center?.y || 0, boundingBox.center?.z || 0)
-      ;(camera as THREE.PerspectiveCamera).updateProjectionMatrix()
-    }
-  }, [camera, boundingBox, size, viewMode])
-  
-  return null
-}
-
-function AutoFitCamera({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
-  const { camera, size } = useThree()
-  
-  const boundingBox = useMemo(() => calculateRibBoundingBox(params, freeformPoints), [params, freeformPoints])
-  
-  useEffect(() => {
-    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)
-    const fov = 50
-    const aspect = size.width / size.height
-    const distance = (maxDim / 2) / Math.tan((fov * Math.PI / 180) / 2) * 1.5
+    if (viewMode !== '3d') return
     
-    const cameraPos = new THREE.Vector3(distance * 0.7, distance * 0.5, distance)
-    camera.position.copy(cameraPos)
-    camera.lookAt(0, 0, 0)
-    ;(camera as THREE.PerspectiveCamera).updateProjectionMatrix()
-  }, [camera, boundingBox, size])
+    const center = target || boundingBox.center || new THREE.Vector3(0, 0, 0)
+    const size = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) || 10
+    
+    const fov = (camera as THREE.PerspectiveCamera).fov || 50
+    const distance = (size / 2) / Math.tan((fov * Math.PI / 180) / 2) * 2.2
+    
+    camera.position.set(center.x + distance * 0.5, center.y + distance * 0.3, center.z + distance)
+    camera.lookAt(center)
+  }, [camera, boundingBox, viewMode, target])
   
   return null
 }
@@ -503,7 +475,7 @@ function ShelfMesh({ params, freeformPoints }: { params: ShelfParams, freeformPo
       {geometries.map((geometry, index) => (
         <mesh key={index} geometry={geometry} material={material} position={[positions[index].x, positions[index].y, positions[index].z]} castShadow receiveShadow />
       ))}
-      {params.rodCount > 0 && positions.length > 0 && <Rods positions={positions} rodDiameterMM={rodDiameterMM} depthMM={depthMM} rodCount={params.rodCount} />}
+      {params.rodCount > 0 && positions.length > 0 && <Rods positions={positions} rodDiameterMM={rodDiameterMM} depthMM={depthMM} rodCount={params.rodCount} flatEdge={params.flatEdge} />}
     </group>
   )
 }
@@ -531,11 +503,11 @@ function Scene({ params, viewMode, freeformPoints, isSingleRib = false, canvasId
         {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} />}
       </Float>
       
-      <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} />
+      <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} />
       
       <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
       
-      {viewMode === '3d' && <OrbitControls enablePan={false} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} makeDefault />}
+      {viewMode === '3d' && <OrbitControls enablePan={false} enableDamping dampingFactor={0.05} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} makeDefault />}
       {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 80, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 80]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'side' && <OrthographicCamera makeDefault position={[80, 0, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
@@ -774,10 +746,14 @@ function App() {
                   <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="hero-canvas" />
                 </Canvas>
               </div>
-              {/* Top Right Mini Preview */}
+              {/* Top Right Mini Preview - Animated Single Rib */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-cream/90 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-charcoal/10 shadow-lg">
-                <Canvas shadows camera={{ position: [0, 10, 20], fov: 35 }}>
-                  <Scene params={params} viewMode="top" freeformPoints={freeformPoints} canvasId="mini-canvas" />
+                <Canvas shadows camera={{ position: [0, 0, 10], fov: 45 }}>
+                  <ambientLight intensity={0.6} />
+                  <directionalLight position={[5, 5, 5]} intensity={0.8} />
+                  <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.3}>
+                    <SingleRibPreview params={params} freeformPoints={freeformPoints} />
+                  </Float>
                 </Canvas>
               </div>
             </div>
@@ -892,7 +868,7 @@ function App() {
                 <div className="sticky top-24">
                   <div className="card h-full min-h-[450px] flex flex-col">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-display text-base text-charcoal">Full Shelf Preview</h3>
+                      <h3 className="font-display text-base text-charcoal">Full Shelf Editor</h3>
                       <div className="flex gap-1 bg-cream rounded-lg p-1">
                         {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
                           <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
