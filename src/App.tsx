@@ -330,7 +330,7 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
     
     const geometry = generateRibGeometry(
       params.ribShape, scaledWidth, scaledHeight, scaledDepth,
-      params.ribRotateX + transform.rotation - 90, params.ribRotateY, params.ribRotateZ,
+      params.ribRotateX + transform.rotation, params.ribRotateY, params.ribRotateZ,
       params.flatEdge, freeformPoints
     )
     geometries.push(geometry)
@@ -457,7 +457,7 @@ function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, fre
   const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
   
   const geometry = useMemo(() => 
-    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX - 90, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints), 
+    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints), 
     [params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints]
   )
   
@@ -508,7 +508,7 @@ function ShelfMesh({ params, freeformPoints }: { params: ShelfParams, freeformPo
   )
 }
 
-function Scene({ params, viewMode, freeformPoints, isSingleRib = false, onResetView }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], isSingleRib?: boolean, onResetView?: () => void }) {
+function Scene({ params, viewMode, freeformPoints, isSingleRib = false, canvasId }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], isSingleRib?: boolean, canvasId?: string }) {
   const lengthMM = toMM(params.length)
   const heightMM = toMM(params.height)
   const cameraDistance = Math.max(lengthMM, heightMM) * 1.5
@@ -535,7 +535,7 @@ function Scene({ params, viewMode, freeformPoints, isSingleRib = false, onResetV
       
       <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
       
-      {viewMode === '3d' && <OrbitControls enablePan={false} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} />}
+      {viewMode === '3d' && <OrbitControls enablePan={false} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} makeDefault />}
       {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 80, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 80]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'side' && <OrthographicCamera makeDefault position={[80, 0, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
@@ -677,7 +677,8 @@ function App() {
   
   const [activeSection, setActiveSection] = useState('design')
   const [activePreset, setActivePreset] = useState('gentle')
-  const [viewMode, setViewMode] = useState<ViewMode>('3d')
+  const [ribViewMode, setRibViewMode] = useState<ViewMode>('side')
+  const [shelfViewMode, setShelfViewMode] = useState<ViewMode>('3d')
   const [showExport, setShowExport] = useState(false)
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
@@ -733,8 +734,6 @@ function App() {
     }
   }
   
-  const handleResetView = () => setViewMode('3d')
-  
   const handleExport = (format: 'svg' | 'dxf') => {
     setIsExporting(true)
     setTimeout(() => { setIsExporting(false); setShowExport(false) }, 500)
@@ -747,7 +746,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-charcoal text-cream flex items-center justify-center font-display text-xl">P</div>
-            <span className="font-display text-2xl text-charcoal">Paradecor</span>
+            <span className="font-display text-2xl text-charcoal">Ribform</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <button onClick={() => setActiveSection('design')} className={`text-sm tracking-wide transition-colors ${activeSection === 'design' ? 'text-charcoal' : 'text-warm-gray hover:text-stone'}`}>Designer</button>
@@ -759,7 +758,7 @@ function App() {
 
       <main className="pt-20">
         {/* Hero */}
-        <section className="relative min-h-[50vh] flex items-center bg-gradient-to-b from-cream to-ivory">
+        <section className="relative min-h-[50vh] flex items-center bg-gradient-to-b from-cream to-ivory overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 py-12 grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <p className="text-terracotta text-sm tracking-[0.2em] uppercase mb-4">Rib-Based Design</p>
@@ -769,10 +768,18 @@ function App() {
               <p className="text-stone mb-8">Design parametric shelves with primitive shapes. Rotate in 3D, scale along path.</p>
               <button onClick={() => document.getElementById('designer')?.scrollIntoView({ behavior: 'smooth' })} className="btn-primary">Start Designing</button>
             </div>
-            <div className="h-[350px]">
-              <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
-                <Scene params={params} viewMode="3d" freeformPoints={freeformPoints} />
-              </Canvas>
+            <div className="relative h-[350px]">
+              <div className="absolute inset-0">
+                <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
+                  <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="hero-canvas" />
+                </Canvas>
+              </div>
+              {/* Top Right Mini Preview */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-cream/90 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-charcoal/10 shadow-lg">
+                <Canvas shadows camera={{ position: [0, 10, 20], fov: 35 }}>
+                  <Scene params={params} viewMode="top" freeformPoints={freeformPoints} canvasId="mini-canvas" />
+                </Canvas>
+              </div>
             </div>
           </div>
         </section>
@@ -784,20 +791,20 @@ function App() {
             <div className="mb-8">
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-display text-base text-charcoal">Single Rib Preview</h3>
+                  <h3 className="font-display text-base text-charcoal">Single Rib Editor</h3>
                   <div className="flex gap-1 bg-cream rounded-lg p-1">
                     {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
-                      <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${viewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                      <button key={mode} onClick={() => setRibViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${ribViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
                         {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
                       </button>
                     ))}
-                    <button onClick={handleResetView} className="px-3 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-2">Reset</button>
+                    <button onClick={() => setRibViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
                   </div>
                 </div>
                 <div className="flex gap-6 items-start">
-                  <div className="w-48 h-48 bg-stone/5 rounded-lg overflow-hidden">
-                    <Canvas shadows camera={{ position: [0, 0, 8], fov: 50 }}>
-                      <Scene params={params} viewMode="side" freeformPoints={freeformPoints} isSingleRib={true} />
+                  <div className="w-64 h-64 bg-stone/5 rounded-lg overflow-hidden border border-stone/10">
+                    <Canvas shadows camera={{ position: [0, 0, 12], fov: 45 }}>
+                      <Scene params={params} viewMode={ribViewMode} freeformPoints={freeformPoints} isSingleRib={true} canvasId="rib-canvas" />
                     </Canvas>
                   </div>
                   <div className="flex-1 grid grid-cols-3 gap-4">
@@ -885,19 +892,19 @@ function App() {
                 <div className="sticky top-24">
                   <div className="card h-full min-h-[450px] flex flex-col">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-display text-base text-charcoal">3D Shelf Preview</h3>
+                      <h3 className="font-display text-base text-charcoal">Full Shelf Preview</h3>
                       <div className="flex gap-1 bg-cream rounded-lg p-1">
                         {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
-                          <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${viewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                          <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
                             {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
                           </button>
                         ))}
-                        <button onClick={handleResetView} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                        <button onClick={() => setShelfViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
                       </div>
                     </div>
                     <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative">
                       <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
-                        <Scene params={params} viewMode={viewMode} freeformPoints={freeformPoints} />
+                        <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="shelf-canvas" />
                       </Canvas>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-3">
@@ -1023,8 +1030,8 @@ function App() {
       <footer className="bg-charcoal text-cream py-8">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-cream text-charcoal flex items-center justify-center font-display text-lg">P</div>
-            <span className="font-display text-xl">Paradecor</span>
+            <div className="w-8 h-8 bg-charcoal text-cream flex items-center justify-center font-display text-lg">R</div>
+            <span className="font-display text-xl">Ribform</span>
           </div>
           <p className="text-cream/50 text-sm">Parametric rib-based furniture</p>
         </div>

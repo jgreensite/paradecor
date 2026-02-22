@@ -24,8 +24,8 @@ test.describe('Parametric Shelf Creator', () => {
   });
 
   test('State Sync: Physical dimension updates Factor slider', async ({ page }) => {
-    // Find the X dimension input in Single Rib Preview section
-    const singleRibSection = page.locator('.card').filter({ hasText: 'Single Rib Preview' });
+    // Find the X dimension input in Single Rib Editor section
+    const singleRibSection = page.locator('.card').filter({ hasText: 'Single Rib Editor' });
     const xInput = singleRibSection.locator('input[type="number"]').first();
     
     // Get the factor slider - it's the range input after the X dimension controls
@@ -87,8 +87,8 @@ test.describe('Parametric Shelf Creator', () => {
   });
 
   test('View Controls: Switching views updates the scene', async ({ page }) => {
-    // Get the view buttons from the 3D Shelf Preview section
-    const previewCard = page.locator('.card').filter({ hasText: '3D Shelf Preview' });
+    // Get the view buttons from the Full Shelf Preview section
+    const previewCard = page.locator('.card').filter({ hasText: 'Full Shelf Preview' });
     
     // Click through different view modes
     await previewCard.getByRole('button', { name: 'Top' }).click();
