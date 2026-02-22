@@ -315,10 +315,14 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   const positions: { x: number, y: number, z: number }[] = []
   const rotations: number[] = []
   
+  const activeTransforms = params.sizeTransforms.length > 0 
+    ? params.sizeTransforms 
+    : [{ position: 0, scaleX: 1, scaleY: 1, rotation: 0 }, { position: 1, scaleX: 1, scaleY: 1, rotation: 0 }]
+  
   for (let i = 0; i < wavePath.length; i++) {
     const point = wavePath[i]
     const t = i / (wavePath.length - 1 || 1)
-    const transform = interpolateTransform(params.sizeTransforms, t)
+    const transform = interpolateTransform(activeTransforms, t)
     
     const scaledWidth = baseX * transform.scaleX
     const scaledHeight = baseY * transform.scaleY
@@ -326,7 +330,7 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
     
     const geometry = generateRibGeometry(
       params.ribShape, scaledWidth, scaledHeight, scaledDepth,
-      params.ribRotateX + transform.rotation, params.ribRotateY, params.ribRotateZ,
+      params.ribRotateX + transform.rotation - 90, params.ribRotateY, params.ribRotateZ,
       params.flatEdge, freeformPoints
     )
     geometries.push(geometry)
@@ -337,16 +341,30 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   return { geometries, positions, rotations }
 }
 
-function Rods({ positions, rodDiameterMM, depthMM }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number }) {
-  const rodLength = 60
+function Rods({ positions, rodDiameterMM, depthMM, rodCount = 1 }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number, rodCount?: number }) {
+  const rodLength = 80
   
   return (
     <group>
-      {positions.map((pos, i) => (
-        <mesh key={i} position={[pos.x, pos.y, depthMM + 5]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <cylinderGeometry args={[rodDiameterMM / 2, rodDiameterMM / 2, rodLength, 12]} />
-          <meshStandardMaterial color="#4A4744" metalness={0.8} roughness={0.2} />
-        </mesh>
+      {positions.map((pos, ribIndex) => (
+        <group key={ribIndex}>
+          {Array.from({ length: rodCount }).map((_, rodIndex) => {
+            const spacing = rodCount > 1 ? (depthMM * 0.6) / (rodCount - 1) : 0
+            const offset = rodCount > 1 ? -depthMM * 0.3 : 0
+            const zPos = offset + rodIndex * spacing
+            return (
+              <mesh 
+                key={rodIndex} 
+                position={[pos.x, pos.y, zPos]} 
+                rotation={[Math.PI / 2, 0, 0]} 
+                castShadow
+              >
+                <cylinderGeometry args={[rodDiameterMM / 2, rodDiameterMM / 2, rodLength, 12]} />
+                <meshStandardMaterial color="#4A4744" metalness={0.8} roughness={0.2} />
+              </mesh>
+            )
+          })}
+        </group>
       ))}
     </group>
   )
@@ -370,6 +388,47 @@ function calculateRibBoundingBox(params: ShelfParams, freeformPoints?: FreeformR
   }
   
   return { width: widthMM, height: heightMM, depth: depthMM }
+}
+
+function calculateShelfBoundingBox(params: ShelfParams): { width: number, height: number, depth: number, center: THREE.Vector3 } {
+  const lengthMM = toMM(params.length)
+  const waveHeightMM = toMM(params.height)
+  const ribDepthMM = toMM(params.ribDepth)
+  
+  const waveAmplitude = params.waveHeight * 10
+  const totalHeight = waveHeightMM + waveAmplitude
+  
+  return {
+    width: lengthMM,
+    height: totalHeight,
+    depth: ribDepthMM,
+    center: new THREE.Vector3(0, 0, 0)
+  }
+}
+
+function ZoomToFit({ boundingBox, viewMode }: { boundingBox: { width: number, height: number, depth: number, center?: THREE.Vector3 }, viewMode: ViewMode }) {
+  const { camera, size } = useThree()
+  
+  useEffect(() => {
+    if (viewMode === '3d') {
+      const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)
+      const fov = (camera as THREE.PerspectiveCamera).fov || 50
+      const aspect = size.width / size.height
+      
+      const distance = (maxDim / 2) / Math.tan((fov * Math.PI / 180) / 2) * 2
+      const cameraPos = new THREE.Vector3(
+        boundingBox.center?.x || distance * 0.5,
+        boundingBox.center?.y || distance * 0.3,
+        distance
+      )
+      
+      camera.position.copy(cameraPos)
+      camera.lookAt(boundingBox.center?.x || 0, boundingBox.center?.y || 0, boundingBox.center?.z || 0)
+      ;(camera as THREE.PerspectiveCamera).updateProjectionMatrix()
+    }
+  }, [camera, boundingBox, size, viewMode])
+  
+  return null
 }
 
 function AutoFitCamera({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
@@ -398,7 +457,7 @@ function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, fre
   const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
   
   const geometry = useMemo(() => 
-    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints), 
+    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX - 90, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints), 
     [params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints]
   )
   
@@ -444,7 +503,7 @@ function ShelfMesh({ params, freeformPoints }: { params: ShelfParams, freeformPo
       {geometries.map((geometry, index) => (
         <mesh key={index} geometry={geometry} material={material} position={[positions[index].x, positions[index].y, positions[index].z]} castShadow receiveShadow />
       ))}
-      {params.rodCount > 0 && positions.length > 0 && <Rods positions={positions} rodDiameterMM={rodDiameterMM} depthMM={depthMM} />}
+      {params.rodCount > 0 && positions.length > 0 && <Rods positions={positions} rodDiameterMM={rodDiameterMM} depthMM={depthMM} rodCount={params.rodCount} />}
     </group>
   )
 }
@@ -453,6 +512,13 @@ function Scene({ params, viewMode, freeformPoints, isSingleRib = false, onResetV
   const lengthMM = toMM(params.length)
   const heightMM = toMM(params.height)
   const cameraDistance = Math.max(lengthMM, heightMM) * 1.5
+  
+  const boundingBox = useMemo(() => 
+    isSingleRib 
+      ? { ...calculateRibBoundingBox(params, freeformPoints), center: new THREE.Vector3(0, 0, 0) }
+      : calculateShelfBoundingBox(params),
+    [params, freeformPoints, isSingleRib]
+  )
   
   return (
     <>
@@ -465,14 +531,14 @@ function Scene({ params, viewMode, freeformPoints, isSingleRib = false, onResetV
         {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} />}
       </Float>
       
-      {isSingleRib && <AutoFitCamera params={params} freeformPoints={freeformPoints} />}
+      <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} />
       
       <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
       
       {viewMode === '3d' && <OrbitControls enablePan={false} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} />}
-      {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 80, 0]} zoom={8} near={0.1} far={1000} />}
-      {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 80]} zoom={8} near={0.1} far={1000} />}
-      {viewMode === 'side' && <OrthographicCamera makeDefault position={[80, 0, 0]} zoom={8} near={0.1} far={1000} />}
+      {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 80, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
+      {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 80]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
+      {viewMode === 'side' && <OrthographicCamera makeDefault position={[80, 0, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
     </>
   )
 }
