@@ -1,0 +1,970 @@
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { Canvas, useThree, useFrame } from '@react-three/fiber'
+import { OrbitControls, OrthographicCamera, ContactShadows, Float } from '@react-three/drei'
+import * as THREE from 'three'
+
+type Unit = 'in' | 'mm'
+type ViewMode = '3d' | 'top' | 'front' | 'side'
+type RibShape = 'square' | 'circle' | 'rectangle' | 'freeform'
+
+interface DimensionUnit {
+  value: number
+  unit: Unit
+}
+
+interface RibSizeTransform {
+  position: number
+  scaleX: number
+  scaleY: number
+  rotation: number
+}
+
+interface AxisDimension {
+  physical: DimensionUnit
+  factor: number
+}
+
+interface ShelfParams {
+  length: DimensionUnit
+  height: DimensionUnit
+  ribDepth: DimensionUnit
+  materialThickness: DimensionUnit
+  ribCount: number
+  waveHeight: number
+  waveFrequency: number
+  ribShape: RibShape
+  ribSize: DimensionUnit
+  ribX: AxisDimension
+  ribY: AxisDimension
+  ribZ: AxisDimension
+  ribRotateX: number
+  ribRotateY: number
+  ribRotateZ: number
+  sizeTransforms: RibSizeTransform[]
+  flatEdge: boolean
+  rodDiameter: DimensionUnit
+  rodCount: number
+  material: string
+  finish: string
+}
+
+interface FreeformRibPoint {
+  x: number
+  y: number
+}
+
+const MATERIALS = [
+  { id: 'mdf', name: 'Premium MDF', price: 45, color: '#E8E4DC', roughness: 0.8 },
+  { id: 'birch-plywood', name: 'Birch Plywood', price: 65, color: '#D4B896', roughness: 0.6 },
+  { id: 'walnut-plywood', name: 'Walnut Plywood', price: 85, color: '#5D4E37', roughness: 0.5 },
+  { id: 'white-pvc', name: 'White PVC', price: 55, color: '#F5F5F5', roughness: 0.3 },
+]
+
+const FINISHES = [
+  { id: 'raw', name: 'Raw', price: 0 },
+  { id: 'matte-white', name: 'Matte White', price: 15 },
+  { id: 'matte-black', name: 'Matte Black', price: 15 },
+  { id: 'gloss', name: 'High Gloss', price: 25 },
+  { id: 'natural-oil', name: 'Natural Oil', price: 20 },
+]
+
+const RIB_SHAPES = [
+  { id: 'square', name: 'Square', icon: '◼️' },
+  { id: 'circle', name: 'Circle', icon: '⚪' },
+  { id: 'rectangle', name: 'Rectangle', icon: '▬' },
+  { id: 'freeform', name: 'Freeform', icon: '✏️' },
+]
+
+const PRESETS = [
+  { id: 'gentle', name: 'Gentle Wave', icon: '〰️', params: { waveHeight: 2, waveFrequency: 1.5, ribCount: 12 } },
+  { id: 'steep', name: 'Steep Wave', icon: '🌊', params: { waveHeight: 4, waveFrequency: 2, ribCount: 10 } },
+  { id: 'flat', name: 'Flat Shelf', icon: '▬', params: { waveHeight: 0, waveFrequency: 0, ribCount: 8 } },
+  { id: 'organic', name: 'Organic', icon: '🌿', params: { waveHeight: 3, waveFrequency: 2.5, ribCount: 15 } },
+]
+
+const MM_PER_INCH = 25.4
+
+function toMM(dim: DimensionUnit): number {
+  return dim.unit === 'mm' ? dim.value : dim.value * MM_PER_INCH
+}
+
+function toPhysical(mmValue: number, unit: Unit): number {
+  return unit === 'mm' ? mmValue : mmValue / MM_PER_INCH
+}
+
+function createAxisDimension(physicalValue: number, unit: Unit): AxisDimension {
+  return {
+    physical: { value: physicalValue, unit },
+    factor: 1
+  }
+}
+
+function updateAxisDimensionFromPhysical(dim: AxisDimension, newPhysical: DimensionUnit): AxisDimension {
+  const newMM = toMM(newPhysical)
+  const baseMM = dim.factor === 1 ? toMM({ value: 1, unit: newPhysical.unit }) : toMM(dim.physical) / dim.factor
+  const newFactor = baseMM > 0 ? newMM / baseMM : 1
+  return {
+    physical: newPhysical,
+    factor: Math.max(0.1, Math.min(10, newFactor))
+  }
+}
+
+function updateAxisDimensionFromFactor(dim: AxisDimension, newFactor: number): AxisDimension {
+  const clampedFactor = Math.max(0.1, Math.min(10, newFactor))
+  const newMM = toMM(dim.physical) / dim.factor * clampedFactor
+  return {
+    physical: { ...dim.physical, value: toPhysical(newMM, dim.physical.unit) },
+    factor: clampedFactor
+  }
+}
+
+function generateWavePath(lengthMM: number, heightMM: number, waveHeight: number, waveFrequency: number, ribCount: number): { x: number, y: number }[] {
+  const points: { x: number, y: number }[] = []
+  
+  for (let i = 0; i <= ribCount; i++) {
+    const t = i / ribCount
+    const xPos = t * lengthMM - lengthMM / 2
+    const waveY = Math.sin(t * Math.PI * 2 * waveFrequency) * waveHeight * 10
+    points.push({ x: xPos, y: waveY })
+  }
+  
+  return points
+}
+
+function interpolateTransform(transforms: RibSizeTransform[], position: number): { scaleX: number, scaleY: number, rotation: number } {
+  if (transforms.length === 0) return { scaleX: 1, scaleY: 1, rotation: 0 }
+  
+  const sorted = [...transforms].sort((a, b) => a.position - b.position)
+  
+  if (position <= sorted[0].position) return { scaleX: sorted[0].scaleX, scaleY: sorted[0].scaleY, rotation: sorted[0].rotation }
+  if (position >= sorted[sorted.length - 1].position) return { scaleX: sorted[sorted.length - 1].scaleX, scaleY: sorted[sorted.length - 1].scaleY, rotation: sorted[sorted.length - 1].rotation }
+  
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (position >= sorted[i].position && position <= sorted[i + 1].position) {
+      const t = (position - sorted[i].position) / (sorted[i + 1].position - sorted[i].position)
+      return {
+        scaleX: sorted[i].scaleX + (sorted[i + 1].scaleX - sorted[i].scaleX) * t,
+        scaleY: sorted[i].scaleY + (sorted[i + 1].scaleY - sorted[i].scaleY) * t,
+        rotation: sorted[i].rotation + (sorted[i + 1].rotation - sorted[i].rotation) * t,
+      }
+    }
+  }
+  
+  return { scaleX: 1, scaleY: 1, rotation: 0 }
+}
+
+function generateRibGeometry(
+  shape: RibShape, 
+  widthMM: number, 
+  heightMM: number,
+  depthMM: number,
+  rotX: number,
+  rotY: number,
+  rotZ: number,
+  flatEdge: boolean,
+  freeformPoints?: FreeformRibPoint[]
+): THREE.BufferGeometry {
+  const geometry = new THREE.BufferGeometry()
+  const vertices: number[] = []
+  const indices: number[] = []
+  const normals: number[] = []
+  
+  const thickness = flatEdge ? 0 : depthMM / 2
+  
+  if (shape === 'square' || shape === 'rectangle') {
+    const w = widthMM / 2
+    const h = heightMM / 2
+    const zF = flatEdge ? depthMM : depthMM / 2
+    const zB = flatEdge ? 0 : -depthMM / 2
+    
+    const frontFace = [[-w, -h, zF], [w, -h, zF], [w, h, zF], [-w, h, zF]]
+    const backFace = [[-w, -h, zB], [-w, h, zB], [w, h, zB], [w, -h, zB]]
+    const faces = [
+      frontFace, backFace,
+      [[-w, h, zF], [w, h, zF], [w, h, zB], [-w, h, zB]],
+      [[-w, -h, zB], [w, -h, zB], [w, -h, zF], [-w, -h, zF]],
+      [[w, -h, zF], [w, -h, zB], [w, h, zB], [w, h, zF]],
+      [[-w, -h, zB], [-w, -h, zF], [-w, h, zF], [-w, h, zB]],
+    ]
+    
+    faces.forEach(face => {
+      const baseIdx = vertices.length / 3
+      face.forEach(v => vertices.push(...v))
+      const v0 = new THREE.Vector3(...face[0])
+      const v1 = new THREE.Vector3(...face[1])
+      const v2 = new THREE.Vector3(...face[2])
+      const edge1 = new THREE.Vector3().subVectors(v1, v0)
+      const edge2 = new THREE.Vector3().subVectors(v2, v0)
+      const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize()
+      for (let i = 0; i < 4; i++) normals.push(normal.x, normal.y, normal.z)
+      indices.push(baseIdx, baseIdx + 1, baseIdx + 2, baseIdx, baseIdx + 2, baseIdx + 3)
+    })
+    
+  } else if (shape === 'circle') {
+    const radiusX = widthMM / 2
+    const radiusY = heightMM / 2
+    const segments = 24
+    const zF = flatEdge ? depthMM : depthMM / 2
+    const zB = flatEdge ? 0 : -depthMM / 2
+    
+    const frontCenter = vertices.length / 3
+    vertices.push(0, 0, zF)
+    normals.push(0, 0, 1)
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2
+      vertices.push(Math.cos(angle) * radiusX, Math.sin(angle) * radiusY, zF)
+      normals.push(0, 0, 1)
+    }
+    for (let i = 0; i < segments; i++) indices.push(frontCenter, frontCenter + i + 1, frontCenter + i + 2)
+    
+    const backCenter = vertices.length / 3
+    vertices.push(0, 0, zB)
+    normals.push(0, 0, -1)
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2
+      vertices.push(Math.cos(angle) * radiusX, Math.sin(angle) * radiusY, zB)
+      normals.push(0, 0, -1)
+    }
+    for (let i = 0; i < segments; i++) indices.push(backCenter, backCenter + i + 2, backCenter + i + 1)
+    
+    const sideStart = vertices.length / 3
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2
+      const x = Math.cos(angle) * radiusX
+      const y = Math.sin(angle) * radiusY
+      vertices.push(x, y, zF)
+      normals.push(Math.cos(angle), Math.sin(angle), 0)
+      vertices.push(x, y, zB)
+      normals.push(Math.cos(angle), Math.sin(angle), 0)
+    }
+    for (let i = 0; i < segments; i++) {
+      const a = sideStart + i * 2
+      indices.push(a, a + 1, a + 3, a, a + 3, a + 2)
+    }
+    
+  } else if (shape === 'freeform' && freeformPoints && freeformPoints.length > 2) {
+    const minX = Math.min(...freeformPoints.map(p => p.x))
+    const maxX = Math.max(...freeformPoints.map(p => p.x))
+    const minY = Math.min(...freeformPoints.map(p => p.y))
+    const maxY = Math.max(...freeformPoints.map(p => p.y))
+    const rangeX = maxX - minX || 1
+    const rangeY = maxY - minY || 1
+    
+    const scaledPoints = freeformPoints.map(p => ({
+      x: ((p.x - minX) / rangeX - 0.5) * widthMM,
+      y: ((p.y - minY) / rangeY - 0.5) * heightMM,
+    }))
+    
+    const zF = flatEdge ? depthMM : depthMM / 2
+    const zB = flatEdge ? 0 : -depthMM / 2
+    
+    const frontCenter = vertices.length / 3
+    vertices.push(0, 0, zF)
+    normals.push(0, 0, 1)
+    scaledPoints.forEach(p => { vertices.push(p.x, p.y, zF); normals.push(0, 0, 1) })
+    for (let i = 0; i < scaledPoints.length; i++) indices.push(frontCenter, frontCenter + i + 1, frontCenter + ((i + 1) % scaledPoints.length) + 1)
+    
+    const backCenter = vertices.length / 3
+    vertices.push(0, 0, zB)
+    normals.push(0, 0, -1)
+    scaledPoints.forEach(p => { vertices.push(p.x, p.y, zB); normals.push(0, 0, -1) })
+    for (let i = 0; i < scaledPoints.length; i++) indices.push(backCenter, backCenter + ((i + 1) % scaledPoints.length) + 1, backCenter + i + 1)
+    
+    const sideStart = vertices.length / 3
+    for (let i = 0; i < scaledPoints.length; i++) {
+      const curr = scaledPoints[i]
+      const next = scaledPoints[(i + 1) % scaledPoints.length]
+      const dx = next.x - curr.x
+      const dy = next.y - curr.y
+      const len = Math.sqrt(dx * dx + dy * dy) || 1
+      const nx = -dy / len
+      const ny = dx / len
+      
+      vertices.push(curr.x, curr.y, zF, curr.x, curr.y, zB, next.x, next.y, zB, next.x, next.y, zF)
+      normals.push(nx, ny, 0, nx, ny, 0, nx, ny, 0, nx, ny, 0)
+      const base = sideStart + i * 4
+      indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
+    }
+  }
+  
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  geometry.setIndex(indices)
+  geometry.computeVertexNormals()
+  
+  const euler = new THREE.Euler(THREE.MathUtils.degToRad(rotX), THREE.MathUtils.degToRad(rotY), THREE.MathUtils.degToRad(rotZ))
+  geometry.rotateX(euler.x)
+  geometry.rotateY(euler.y)
+  geometry.rotateZ(euler.z)
+  
+  return geometry
+}
+
+function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[]): { geometries: THREE.BufferGeometry[], positions: { x: number, y: number, z: number }[], rotations: number[] } {
+  const lengthMM = toMM(params.length)
+  const waveHeightMM = toMM(params.height)
+  const depthMM = toMM(params.ribDepth)
+  
+  const baseX = toMM(params.ribX.physical) * params.ribX.factor
+  const baseY = toMM(params.ribY.physical) * params.ribY.factor
+  const baseZ = toMM(params.ribZ.physical) * params.ribZ.factor
+  
+  const wavePath = generateWavePath(lengthMM, waveHeightMM, params.waveHeight, params.waveFrequency, params.ribCount)
+  
+  const geometries: THREE.BufferGeometry[] = []
+  const positions: { x: number, y: number, z: number }[] = []
+  const rotations: number[] = []
+  
+  for (let i = 0; i < wavePath.length; i++) {
+    const point = wavePath[i]
+    const t = i / (wavePath.length - 1 || 1)
+    const transform = interpolateTransform(params.sizeTransforms, t)
+    
+    const scaledWidth = baseX * transform.scaleX
+    const scaledHeight = baseY * transform.scaleY
+    const scaledDepth = baseZ
+    
+    const geometry = generateRibGeometry(
+      params.ribShape, scaledWidth, scaledHeight, scaledDepth,
+      params.ribRotateX + transform.rotation, params.ribRotateY, params.ribRotateZ,
+      params.flatEdge, freeformPoints
+    )
+    geometries.push(geometry)
+    positions.push({ x: point.x, y: point.y, z: 0 })
+    rotations.push(0)
+  }
+  
+  return { geometries, positions, rotations }
+}
+
+function Rods({ positions, rodDiameterMM, depthMM }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number }) {
+  const rodLength = 60
+  
+  return (
+    <group>
+      {positions.map((pos, i) => (
+        <mesh key={i} position={[pos.x, pos.y, depthMM + 5]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[rodDiameterMM / 2, rodDiameterMM / 2, rodLength, 12]} />
+          <meshStandardMaterial color="#4A4744" metalness={0.8} roughness={0.2} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+function calculateRibBoundingBox(params: ShelfParams, freeformPoints?: FreeformRibPoint[]): { width: number, height: number, depth: number } {
+  const widthMM = toMM(params.ribX.physical) * params.ribX.factor
+  const heightMM = toMM(params.ribY.physical) * params.ribY.factor
+  const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
+  
+  if (params.ribShape === 'freeform' && freeformPoints && freeformPoints.length > 2) {
+    const minX = Math.min(...freeformPoints.map(p => p.x))
+    const maxX = Math.max(...freeformPoints.map(p => p.x))
+    const minY = Math.min(...freeformPoints.map(p => p.y))
+    const maxY = Math.max(...freeformPoints.map(p => p.y))
+    return {
+      width: (maxX - minX) / 100 * widthMM,
+      height: (maxY - minY) / 100 * heightMM,
+      depth: depthMM
+    }
+  }
+  
+  return { width: widthMM, height: heightMM, depth: depthMM }
+}
+
+function AutoFitCamera({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
+  const { camera, size } = useThree()
+  
+  const boundingBox = useMemo(() => calculateRibBoundingBox(params, freeformPoints), [params, freeformPoints])
+  
+  useEffect(() => {
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth)
+    const fov = 50
+    const aspect = size.width / size.height
+    const distance = (maxDim / 2) / Math.tan((fov * Math.PI / 180) / 2) * 1.5
+    
+    const cameraPos = new THREE.Vector3(distance * 0.7, distance * 0.5, distance)
+    camera.position.copy(cameraPos)
+    camera.lookAt(0, 0, 0)
+    ;(camera as THREE.PerspectiveCamera).updateProjectionMatrix()
+  }, [camera, boundingBox, size])
+  
+  return null
+}
+
+function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
+  const widthMM = toMM(params.ribX.physical) * params.ribX.factor
+  const heightMM = toMM(params.ribY.physical) * params.ribY.factor
+  const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
+  
+  const geometry = useMemo(() => 
+    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints), 
+    [params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints]
+  )
+  
+  const material = useMemo(() => {
+    const mat = MATERIALS.find(m => m.id === params.material) || MATERIALS[0]
+    return new THREE.MeshStandardMaterial({ color: mat.color, roughness: mat.roughness, metalness: 0.05, side: THREE.DoubleSide })
+  }, [params.material])
+  
+  return <mesh geometry={geometry} material={material} castShadow receiveShadow />
+}
+
+function ShelfMesh({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
+  const groupRef = useRef<THREE.Group>(null)
+  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null)
+  
+  const selectedMaterial = MATERIALS.find(m => m.id === params.material) || MATERIALS[0]
+  
+  const memoKey = useMemo(() => 
+    `${params.length.value}-${params.length.unit}-${params.height.value}-${params.height.unit}-${params.ribDepth.value}-${params.ribCount}-${params.waveHeight}-${params.waveFrequency}-${params.ribShape}-${params.ribX.physical.value}-${params.ribX.factor}-${params.ribY.physical.value}-${params.ribY.factor}-${params.ribZ.physical.value}-${params.ribZ.factor}-${params.ribRotateX}-${params.ribRotateY}-${params.ribRotateZ}-${params.flatEdge}`,
+    [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge]
+  )
+  
+  const { geometries, positions, rotations } = useMemo(() => generateAllRibs(params, freeformPoints), [memoKey, freeformPoints])
+  
+  useEffect(() => {
+    return () => {
+      geometries.forEach(geometry => geometry.dispose())
+      if (materialRef.current) materialRef.current.dispose()
+    }
+  }, [geometries])
+  
+  const material = useMemo(() => {
+    const mat = new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide })
+    materialRef.current = mat
+    return mat
+  }, [selectedMaterial])
+  
+  const rodDiameterMM = toMM(params.rodDiameter)
+  const depthMM = toMM(params.ribDepth)
+  
+  return (
+    <group ref={groupRef}>
+      {geometries.map((geometry, index) => (
+        <mesh key={index} geometry={geometry} material={material} position={[positions[index].x, positions[index].y, positions[index].z]} castShadow receiveShadow />
+      ))}
+      {params.rodCount > 0 && positions.length > 0 && <Rods positions={positions} rodDiameterMM={rodDiameterMM} depthMM={depthMM} />}
+    </group>
+  )
+}
+
+function Scene({ params, viewMode, freeformPoints, isSingleRib = false, onResetView }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], isSingleRib?: boolean, onResetView?: () => void }) {
+  const lengthMM = toMM(params.length)
+  const heightMM = toMM(params.height)
+  const cameraDistance = Math.max(lengthMM, heightMM) * 1.5
+  
+  return (
+    <>
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[20, 30, 20]} intensity={1} castShadow />
+      <directionalLight position={[-10, 10, -10]} intensity={0.3} />
+      <pointLight position={[0, 0, 30]} intensity={0.5} />
+      
+      <Float speed={isSingleRib ? 2 : 1} rotationIntensity={viewMode === '3d' && !isSingleRib ? 0.1 : 0} floatIntensity={0.3}>
+        {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} />}
+      </Float>
+      
+      {isSingleRib && <AutoFitCamera params={params} freeformPoints={freeformPoints} />}
+      
+      <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
+      
+      {viewMode === '3d' && <OrbitControls enablePan={false} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} />}
+      {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 80, 0]} zoom={8} near={0.1} far={1000} />}
+      {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 80]} zoom={8} near={0.1} far={1000} />}
+      {viewMode === 'side' && <OrthographicCamera makeDefault position={[80, 0, 0]} zoom={8} near={0.1} far={1000} />}
+    </>
+  )
+}
+
+function calculateSheetsNeeded(params: ShelfParams): { sheets: number, efficiency: number } {
+  const lengthMM = toMM(params.length)
+  const widthMM = toMM(params.ribX.physical) * params.ribX.factor
+  const heightMM = toMM(params.ribY.physical) * params.ribY.factor
+  const thicknessMM = toMM(params.materialThickness)
+  
+  const ribArea = widthMM * heightMM * thicknessMM
+  const totalArea = ribArea * params.ribCount
+  const sheetArea = 48 * 96 * MM_PER_INCH * MM_PER_INCH
+  
+  const sheets = Math.ceil(totalArea / sheetArea)
+  const efficiency = Math.min(95, Math.round((totalArea / (sheets * sheetArea)) * 100))
+  
+  return { sheets, efficiency }
+}
+
+function UnitInput({ label, value, onChange, min = 0.1, max = 1000, step = 0.1 }: { label: string, value: DimensionUnit, onChange: (dim: DimensionUnit) => void, min?: number, max?: number, step?: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <input type="number" min={min} max={max} step={step} value={value.value} onChange={(e) => onChange({ ...value, value: Number(e.target.value) })} className="w-20 px-2 py-1 text-sm bg-cream border border-stone/20 rounded-md focus:outline-none focus:border-oak" />
+      <select value={value.unit} onChange={(e) => onChange({ ...value, unit: e.target.value as Unit })} className="px-2 py-1 text-sm bg-cream border border-stone/20 rounded-md focus:outline-none focus:border-oak">
+        <option value="in">in</option>
+        <option value="mm">mm</option>
+      </select>
+    </div>
+  )
+}
+
+function AxisDimensionControl({ label, axisDim, onPhysicalChange, onFactorChange }: { label: string, axisDim: AxisDimension, onPhysicalChange: (dim: DimensionUnit) => void, onFactorChange: (factor: number) => void }) {
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-charcoal">{label} (Physical)</label>
+      <UnitInput label={label} value={axisDim.physical} onChange={onPhysicalChange} min={0.1} max={24} step={0.125} />
+      <label className="text-xs font-medium text-charcoal">{label} Factor</label>
+      <input type="range" min={0.1} max={3} step={0.1} value={axisDim.factor} onChange={(e) => onFactorChange(Number(e.target.value))} className="w-full accent-charcoal" />
+      <span className="text-xs text-warm-gray">{axisDim.factor.toFixed(2)}x</span>
+    </div>
+  )
+}
+
+function FreeformDrawer({ onSave, onClose }: { onSave: (points: FreeformRibPoint[]) => void, onClose: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [points, setPoints] = useState<FreeformRibPoint[]>([])
+  const [isDrawing, setIsDrawing] = useState(false)
+  
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    setPoints([{ x: e.clientX - rect.left, y: e.clientY - rect.top }])
+    setIsDrawing(true)
+  }
+  
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    setPoints(prev => [...prev, { x: e.clientX - rect.left, y: e.clientY - rect.top }])
+  }
+  
+  const stopDrawing = () => setIsDrawing(false)
+  
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#C67B5C'
+    ctx.fillRect(0, 0, 4, canvas.height)
+    ctx.font = '12px Arial'
+    ctx.fillStyle = '#C67B5C'
+    ctx.fillText('← Wall (Flat Back)', 10, 20)
+    
+    if (points.length > 1) {
+      ctx.strokeStyle = '#2C2A26'
+      ctx.lineWidth = 2
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.beginPath()
+      ctx.moveTo(points[0].x, points[0].y)
+      points.forEach(p => ctx.lineTo(p.x, p.y))
+      ctx.closePath()
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(44, 42, 38, 0.1)'
+      ctx.fill()
+    }
+  }, [points])
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/50">
+      <div className="bg-cream rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+        <h3 className="font-display text-xl text-charcoal mb-4">Draw Freeform Rib (Side View)</h3>
+        <p className="text-warm-gray text-sm mb-2">Draw your custom rib shape in profile view. The flat back edge (where it mounts to wall) is on the left.</p>
+        <canvas ref={canvasRef} width={400} height={250} className="w-full border border-stone/20 rounded-lg bg-white cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} />
+        <div className="flex gap-3 mt-4">
+          <button onClick={() => setPoints([])} className="px-4 py-2 text-sm text-stone hover:text-charcoal">Clear</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone hover:text-charcoal">Cancel</button>
+          <button onClick={() => onSave(points)} disabled={points.length < 3} className="flex-1 px-4 py-2 bg-charcoal text-cream rounded-lg hover:bg-stone disabled:opacity-50">Save Shape</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function App() {
+  const [params, setParams] = useState<ShelfParams>({
+    length: { value: 48, unit: 'in' },
+    height: { value: 24, unit: 'in' },
+    ribDepth: { value: 8, unit: 'in' },
+    materialThickness: { value: 0.75, unit: 'in' },
+    ribCount: 10,
+    waveHeight: 2,
+    waveFrequency: 1.5,
+    ribShape: 'square',
+    ribSize: { value: 3, unit: 'in' },
+    ribX: createAxisDimension(3, 'in'),
+    ribY: createAxisDimension(3, 'in'),
+    ribZ: createAxisDimension(1, 'in'),
+    ribRotateX: 0,
+    ribRotateY: 0,
+    ribRotateZ: 0,
+    sizeTransforms: [],
+    flatEdge: true,
+    rodDiameter: { value: 0.25, unit: 'in' },
+    rodCount: 2,
+    material: 'birch-plywood',
+    finish: 'raw',
+  })
+  
+  const [activeSection, setActiveSection] = useState('design')
+  const [activePreset, setActivePreset] = useState('gentle')
+  const [viewMode, setViewMode] = useState<ViewMode>('3d')
+  const [showExport, setShowExport] = useState(false)
+  const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
+  const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
+  const [isExporting, setIsExporting] = useState(false)
+  
+  const calculations = useMemo(() => calculateSheetsNeeded(params), [
+    params.length.value, params.length.unit, params.height.value, params.height.unit,
+    params.materialThickness.value, params.materialThickness.unit, params.ribCount,
+    params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor
+  ])
+  
+  const selectedMaterial = useMemo(() => MATERIALS.find(m => m.id === params.material) || MATERIALS[0], [params.material])
+  const selectedFinish = useMemo(() => FINISHES.find(f => f.id === params.finish) || FINISHES[0], [params.finish])
+  const basePrice = useMemo(() => selectedMaterial.price * calculations.sheets, [selectedMaterial.price, calculations.sheets])
+  const finishPrice = useMemo(() => selectedFinish.price * params.ribCount, [selectedFinish.price, params.ribCount])
+  const totalPrice = useMemo(() => basePrice + finishPrice + 35, [basePrice, finishPrice])
+  
+  const handleParamChange = (key: keyof ShelfParams, value: any) => {
+    setParams(prev => ({ ...prev, [key]: value }))
+  }
+  
+  const handleRibXPhysicalChange = useCallback((physical: DimensionUnit) => {
+    setParams(prev => ({ ...prev, ribX: updateAxisDimensionFromPhysical(prev.ribX, physical) }))
+  }, [])
+  
+  const handleRibXFactorChange = useCallback((factor: number) => {
+    setParams(prev => ({ ...prev, ribX: updateAxisDimensionFromFactor(prev.ribX, factor) }))
+  }, [])
+  
+  const handleRibYPhysicalChange = useCallback((physical: DimensionUnit) => {
+    setParams(prev => ({ ...prev, ribY: updateAxisDimensionFromPhysical(prev.ribY, physical) }))
+  }, [])
+  
+  const handleRibYFactorChange = useCallback((factor: number) => {
+    setParams(prev => ({ ...prev, ribY: updateAxisDimensionFromFactor(prev.ribY, factor) }))
+  }, [])
+  
+  const handleRibZPhysicalChange = useCallback((physical: DimensionUnit) => {
+    setParams(prev => ({ ...prev, ribZ: updateAxisDimensionFromPhysical(prev.ribZ, physical) }))
+  }, [])
+  
+  const handleRibZFactorChange = useCallback((factor: number) => {
+    setParams(prev => ({ ...prev, ribZ: updateAxisDimensionFromFactor(prev.ribZ, factor) }))
+  }, [])
+  
+  const handlePresetClick = (presetId: string) => {
+    const preset = PRESETS.find(p => p.id === presetId)
+    if (preset) {
+      setActivePreset(presetId)
+      handleParamChange('waveHeight', preset.params.waveHeight)
+      handleParamChange('waveFrequency', preset.params.waveFrequency)
+      handleParamChange('ribCount', preset.params.ribCount)
+    }
+  }
+  
+  const handleResetView = () => setViewMode('3d')
+  
+  const handleExport = (format: 'svg' | 'dxf') => {
+    setIsExporting(true)
+    setTimeout(() => { setIsExporting(false); setShowExport(false) }, 500)
+  }
+  
+  return (
+    <div className="min-h-screen grain">
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-cream/80 backdrop-blur-md border-b border-stone/5">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-charcoal text-cream flex items-center justify-center font-display text-xl">P</div>
+            <span className="font-display text-2xl text-charcoal">Paradecor</span>
+          </div>
+          <div className="hidden md:flex items-center gap-8">
+            <button onClick={() => setActiveSection('design')} className={`text-sm tracking-wide transition-colors ${activeSection === 'design' ? 'text-charcoal' : 'text-warm-gray hover:text-stone'}`}>Designer</button>
+            <button onClick={() => setShowExport(true)} className="text-sm tracking-wide text-oak hover:text-charcoal transition-colors">Export</button>
+            <button className="btn-primary text-sm py-3 px-6">Get Started</button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="pt-20">
+        {/* Hero */}
+        <section className="relative min-h-[50vh] flex items-center bg-gradient-to-b from-cream to-ivory">
+          <div className="max-w-7xl mx-auto px-6 py-12 grid lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <p className="text-terracotta text-sm tracking-[0.2em] uppercase mb-4">Rib-Based Design</p>
+              <h1 className="font-display text-4xl md:text-5xl text-charcoal leading-[1.1] mb-6">
+                Shape by shape,<span className="block italic text-oak">rib by rib</span>
+              </h1>
+              <p className="text-stone mb-8">Design parametric shelves with primitive shapes. Rotate in 3D, scale along path.</p>
+              <button onClick={() => document.getElementById('designer')?.scrollIntoView({ behavior: 'smooth' })} className="btn-primary">Start Designing</button>
+            </div>
+            <div className="h-[350px]">
+              <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
+                <Scene params={params} viewMode="3d" freeformPoints={freeformPoints} />
+              </Canvas>
+            </div>
+          </div>
+        </section>
+
+        {/* Designer */}
+        <section id="designer" className="py-16 bg-ivory">
+          <div className="max-w-7xl mx-auto px-6">
+            {/* Single Rib Preview */}
+            <div className="mb-8">
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-display text-base text-charcoal">Single Rib Preview</h3>
+                  <div className="flex gap-1 bg-cream rounded-lg p-1">
+                    {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
+                      <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${viewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                        {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                    <button onClick={handleResetView} className="px-3 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-2">Reset</button>
+                  </div>
+                </div>
+                <div className="flex gap-6 items-start">
+                  <div className="w-48 h-48 bg-stone/5 rounded-lg overflow-hidden">
+                    <Canvas shadows camera={{ position: [0, 0, 8], fov: 50 }}>
+                      <Scene params={params} viewMode="side" freeformPoints={freeformPoints} isSingleRib={true} />
+                    </Canvas>
+                  </div>
+                  <div className="flex-1 grid grid-cols-3 gap-4">
+                    <AxisDimensionControl label="X (Width)" axisDim={params.ribX} onPhysicalChange={handleRibXPhysicalChange} onFactorChange={handleRibXFactorChange} />
+                    <AxisDimensionControl label="Y (Height)" axisDim={params.ribY} onPhysicalChange={handleRibYPhysicalChange} onFactorChange={handleRibYFactorChange} />
+                    <AxisDimensionControl label="Z (Depth)" axisDim={params.ribZ} onPhysicalChange={handleRibZPhysicalChange} onFactorChange={handleRibZFactorChange} />
+                  </div>
+                  <div className="space-y-3 w-32">
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Rotate X°</label>
+                      <input type="range" min={-180} max={180} step={15} value={params.ribRotateX} onChange={(e) => handleParamChange('ribRotateX', Number(e.target.value))} className="w-full accent-charcoal" />
+                      <span className="text-xs text-charcoal">{params.ribRotateX}°</span>
+                    </div>
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Rotate Y°</label>
+                      <input type="range" min={-180} max={180} step={15} value={params.ribRotateY} onChange={(e) => handleParamChange('ribRotateY', Number(e.target.value))} className="w-full accent-charcoal" />
+                      <span className="text-xs text-charcoal">{params.ribRotateY}°</span>
+                    </div>
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Rotate Z°</label>
+                      <input type="range" min={-180} max={180} step={15} value={params.ribRotateZ} onChange={(e) => handleParamChange('ribRotateZ', Number(e.target.value))} className="w-full accent-charcoal" />
+                      <span className="text-xs text-charcoal">{params.ribRotateZ}°</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="grid lg:grid-cols-12 gap-6">
+              {/* Left */}
+              <div className="lg:col-span-3 space-y-4">
+                <div className="card">
+                  <h3 className="font-display text-base text-charcoal mb-4">Shelf Dimensions</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Length (X)</label>
+                      <UnitInput label="Length" value={params.length} onChange={(v) => handleParamChange('length', v)} min={6} max={96} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Wave Height (Y)</label>
+                      <UnitInput label="Height" value={params.height} onChange={(v) => handleParamChange('height', v)} min={6} max={72} />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <h3 className="font-display text-base text-charcoal mb-4">Rib Shape</h3>
+                  <div className="grid grid-cols-2 gap-2">
+                    {RIB_SHAPES.map((shape) => (
+                      <button key={shape.id} onClick={() => { handleParamChange('ribShape', shape.id); if (shape.id === 'freeform') setShowFreeformDrawer(true) }} className={`p-3 text-center text-sm rounded-lg transition-all ${params.ribShape === shape.id ? 'bg-charcoal text-cream' : 'bg-cream text-charcoal hover:bg-stone/10'}`}>
+                        <span className="block text-lg mb-1">{shape.icon}</span>
+                        {shape.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-stone/10">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={params.flatEdge} onChange={(e) => handleParamChange('flatEdge', e.target.checked)} className="w-5 h-5 rounded border-stone/30 text-charcoal focus:ring-charcoal" />
+                      <div>
+                        <span className="text-sm font-medium text-charcoal">Flat Back Edge</span>
+                        <p className="text-xs text-warm-gray">← Wall side (right in preview)</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <h3 className="font-display text-base text-charcoal mb-4">Material</h3>
+                  <div className="space-y-2">
+                    {MATERIALS.map((mat) => (
+                      <button key={mat.id} onClick={() => handleParamChange('material', mat.id)} className={`w-full p-2 text-left text-sm rounded-lg transition-all ${params.material === mat.id ? 'bg-charcoal text-cream' : 'bg-cream text-charcoal hover:bg-stone/5'}`}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border border-current" style={{ backgroundColor: mat.color }} />
+                          <span className="flex-1">{mat.name}</span>
+                          <span className="text-xs opacity-70">${mat.price}</span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Center - Sticky Preview */}
+              <div className="lg:col-span-6">
+                <div className="sticky top-24">
+                  <div className="card h-full min-h-[450px] flex flex-col">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-display text-base text-charcoal">3D Shelf Preview</h3>
+                      <div className="flex gap-1 bg-cream rounded-lg p-1">
+                        {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
+                          <button key={mode} onClick={() => setViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${viewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                            {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                          </button>
+                        ))}
+                        <button onClick={handleResetView} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                      </div>
+                    </div>
+                    <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative">
+                      <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
+                        <Scene params={params} viewMode={viewMode} freeformPoints={freeformPoints} />
+                      </Canvas>
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-3">
+                      <div className="bg-charcoal text-cream p-3 text-center rounded-lg">
+                        <p className="text-xl font-display">{calculations.sheets}</p>
+                        <p className="text-xs text-cream/60">Sheets</p>
+                      </div>
+                      <div className="bg-charcoal text-cream p-3 text-center rounded-lg">
+                        <p className="text-xl font-display">{calculations.efficiency}%</p>
+                        <p className="text-xs text-cream/60">Efficiency</p>
+                      </div>
+                      <div className="bg-charcoal text-cream p-3 text-center rounded-lg">
+                        <p className="text-xl font-display">{params.ribCount}</p>
+                        <p className="text-xs text-cream/60">Ribs</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Right */}
+              <div className="lg:col-span-3 space-y-4">
+                <div className="card">
+                  <h3 className="font-display text-base text-charcoal mb-4">Wave Path</h3>
+                  
+                  {/* Presets moved here */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {PRESETS.map((preset) => (
+                      <button key={preset.id} onClick={() => handlePresetClick(preset.id)} className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${activePreset === preset.id ? 'bg-charcoal text-cream' : 'bg-cream text-stone hover:bg-stone/10'}`}>
+                        <span className="mr-1">{preset.icon}</span>
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Rib Count</span><span className="text-charcoal font-medium">{params.ribCount}</span></label>
+                      <input type="range" min={3} max={30} value={params.ribCount} onChange={(e) => handleParamChange('ribCount', Number(e.target.value))} className="w-full accent-charcoal" />
+                    </div>
+                    <div>
+                      <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Wave Amplitude</span><span className="text-charcoal font-medium">{params.waveHeight}"</span></label>
+                      <input type="range" min={0} max={8} step={0.5} value={params.waveHeight} onChange={(e) => handleParamChange('waveHeight', Number(e.target.value))} className="w-full accent-oak" />
+                    </div>
+                    <div>
+                      <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Frequency</span><span className="text-charcoal font-medium">{params.waveFrequency}</span></label>
+                      <input type="range" min={0.5} max={4} step={0.25} value={params.waveFrequency} onChange={(e) => handleParamChange('waveFrequency', Number(e.target.value))} className="w-full accent-oak" />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <h3 className="font-display text-base text-charcoal mb-4">Size Transform</h3>
+                  <p className="text-xs text-warm-gray mb-3">Scale ribs along path</p>
+                  <div className="space-y-2">
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs w-12">Start</span>
+                      <input type="number" min={0.1} max={3} step={0.1} value={params.sizeTransforms[0]?.scaleX || 1} onChange={(e) => { const newTransforms = [...params.sizeTransforms]; if (!newTransforms[0]) newTransforms[0] = { position: 0, scaleX: 1, scaleY: 1, rotation: 0 }; newTransforms[0].scaleX = Number(e.target.value); newTransforms[0].scaleY = Number(e.target.value); handleParamChange('sizeTransforms', newTransforms) }} className="w-16 px-2 py-1 text-sm" />
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs w-12">End</span>
+                      <input type="number" min={0.1} max={3} step={0.1} value={params.sizeTransforms[1]?.scaleX || 1} onChange={(e) => { const newTransforms = [...params.sizeTransforms]; if (!newTransforms[1]) newTransforms[1] = { position: 1, scaleX: 1, scaleY: 1, rotation: 0 }; newTransforms[1].scaleX = Number(e.target.value); newTransforms[1].scaleY = Number(e.target.value); handleParamChange('sizeTransforms', newTransforms) }} className="w-16 px-2 py-1 text-sm" />
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="card">
+                  <h3 className="font-display text-base text-charcoal mb-4">Wall Mount</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Rod Diameter</label>
+                      <UnitInput label="Rod" value={params.rodDiameter} onChange={(v) => handleParamChange('rodDiameter', v)} min={0.125} max={1} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-warm-gray block mb-1">Rods per Rib</label>
+                      <input type="range" min={1} max={4} value={params.rodCount} onChange={(e) => handleParamChange('rodCount', Number(e.target.value))} className="w-full accent-terracotta" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Price */}
+        <section className="py-12 bg-charcoal text-cream">
+          <div className="max-w-2xl mx-auto px-6">
+            <div className="card bg-stone/20 border border-stone/30 p-6">
+              <div className="text-center mb-4">
+                <p className="font-display text-4xl mb-1">${totalPrice}</p>
+                <p className="text-cream/50 text-sm">{params.length.value}{params.length.unit} × {params.height.value}{params.height.unit} • {params.ribCount} {params.ribShape} ribs</p>
+              </div>
+              <button className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors" onClick={() => setShowExport(true)}>Export & Order</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* Export Modal */}
+      {showExport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/50">
+          <div className="bg-cream rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl">
+            <h2 className="font-display text-2xl text-charcoal mb-6">Export Files</h2>
+            <div className="space-y-4">
+              <button onClick={() => handleExport('svg')} disabled={isExporting} className="w-full p-4 bg-charcoal text-cream rounded-xl hover:bg-stone flex items-center justify-between">
+                <div className="text-left"><p className="font-medium">SVG Cut Files</p><p className="text-xs text-cream/60">Ribs laid flat with numbers</p></div>
+                <span className="text-oak">↓</span>
+              </button>
+              <button onClick={() => handleExport('dxf')} disabled={isExporting} className="w-full p-4 bg-charcoal text-cream rounded-xl hover:bg-stone flex items-center justify-between">
+                <div className="text-left"><p className="font-medium">DXF Cut Files</p><p className="text-xs text-cream/60">CAD-ready format</p></div>
+                <span className="text-oak">↓</span>
+              </button>
+            </div>
+            <button onClick={() => setShowExport(false)} className="w-full mt-4 py-3 text-stone hover:text-charcoal">Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* Freeform Drawer */}
+      {showFreeformDrawer && <FreeformDrawer onSave={(points) => { setFreeformPoints(points); setShowFreeformDrawer(false) }} onClose={() => setShowFreeformDrawer(false)} />}
+
+      {/* Footer */}
+      <footer className="bg-charcoal text-cream py-8">
+        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-cream text-charcoal flex items-center justify-center font-display text-lg">P</div>
+            <span className="font-display text-xl">Paradecor</span>
+          </div>
+          <p className="text-cream/50 text-sm">Parametric rib-based furniture</p>
+        </div>
+      </footer>
+    </div>
+  )
+}
+
+export default App
