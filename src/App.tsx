@@ -408,16 +408,25 @@ function ZoomToFit({ boundingBox, viewMode, target }: { boundingBox: { width: nu
   const { camera } = useThree()
   
   useEffect(() => {
-    if (viewMode !== '3d') return
-    
     const center = target || boundingBox.center || new THREE.Vector3(0, 0, 0)
     const size = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) || 10
     
     const fov = (camera as THREE.PerspectiveCamera).fov || 50
-    const distance = (size / 2) / Math.tan((fov * Math.PI / 180) / 2) * 2.2
     
-    camera.position.set(center.x + distance * 0.5, center.y + distance * 0.3, center.z + distance)
-    camera.lookAt(center)
+    if (viewMode === '3d') {
+      const distance = (size / 2) / Math.tan((fov * Math.PI / 180) / 2) * 2.5
+      camera.position.set(center.x + distance * 0.5, center.y + distance * 0.5, center.z + distance)
+      camera.lookAt(center)
+    } else if (viewMode === 'top') {
+      camera.position.set(center.x, center.y + size * 2, center.z)
+      camera.lookAt(center)
+    } else if (viewMode === 'front') {
+      camera.position.set(center.x, center.y, center.z + size * 2)
+      camera.lookAt(center)
+    } else if (viewMode === 'side') {
+      camera.position.set(center.x + size * 2, center.y, center.z)
+      camera.lookAt(center)
+    }
   }, [camera, boundingBox, viewMode, target])
   
   return null
@@ -507,10 +516,10 @@ function Scene({ params, viewMode, freeformPoints, isSingleRib = false, canvasId
       
       <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
       
-      {viewMode === '3d' && <OrbitControls enablePan={false} enableDamping dampingFactor={0.05} minDistance={cameraDistance * 0.3} maxDistance={cameraDistance * 2} makeDefault />}
-      {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 80, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
-      {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 80]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
-      {viewMode === 'side' && <OrthographicCamera makeDefault position={[80, 0, 0]} zoom={8} near={0.1} far={1000} onUpdate={c => c.lookAt(0, 0, 0)} />}
+      {viewMode === '3d' && <OrbitControls enablePan={false} enableDamping dampingFactor={0.05} minDistance={5} maxDistance={100} makeDefault />}
+      {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 50, 0]} zoom={20} near={0.1} far={200} onUpdate={c => c.lookAt(0, 0, 0)} />}
+      {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 50]} zoom={20} near={0.1} far={200} onUpdate={c => c.lookAt(0, 0, 0)} />}
+      {viewMode === 'side' && <OrthographicCamera makeDefault position={[50, 0, 0]} zoom={20} near={0.1} far={200} onUpdate={c => c.lookAt(0, 0, 0)} />}
     </>
   )
 }
@@ -742,13 +751,13 @@ function App() {
             </div>
             <div className="relative h-[350px]">
               <div className="absolute inset-0">
-                <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
+                <Canvas shadows camera={{ position: [6, 5, 8], fov: 45 }}>
                   <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="hero-canvas" />
                 </Canvas>
               </div>
               {/* Top Right Mini Preview - Animated Single Rib */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-cream/90 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-charcoal/10 shadow-lg">
-                <Canvas shadows camera={{ position: [0, 0, 10], fov: 45 }}>
+                <Canvas shadows camera={{ position: [5, 4, 8], fov: 45 }}>
                   <ambientLight intensity={0.6} />
                   <directionalLight position={[5, 5, 5]} intensity={0.8} />
                   <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.3}>
@@ -779,7 +788,7 @@ function App() {
                 </div>
                 <div className="flex gap-6 items-start">
                   <div className="w-64 h-64 bg-stone/5 rounded-lg overflow-hidden border border-stone/10">
-                    <Canvas shadows camera={{ position: [0, 0, 12], fov: 45 }}>
+                    <Canvas shadows camera={{ position: [5, 4, 8], fov: 45 }}>
                       <Scene params={params} viewMode={ribViewMode} freeformPoints={freeformPoints} isSingleRib={true} canvasId="rib-canvas" />
                     </Canvas>
                   </div>
@@ -879,7 +888,7 @@ function App() {
                       </div>
                     </div>
                     <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative">
-                      <Canvas shadows camera={{ position: [0, 0, 15], fov: 45 }}>
+                      <Canvas shadows camera={{ position: [6, 5, 8], fov: 45 }}>
                         <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="shelf-canvas" />
                       </Canvas>
                     </div>
