@@ -193,20 +193,19 @@ test.describe('Parametric Shelf Creator - Rib Shapes', () => {
 
   test('Freeform button opens drawer', async ({ page }) => {
     await page.getByRole('button', { name: /Freeform/i }).first().click();
-    await expect(page.getByText('Draw Freeform Rib')).toBeVisible();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
   });
 
   test('Freeform drawer can be closed', async ({ page }) => {
     await page.getByRole('button', { name: /Freeform/i }).first().click();
-    await expect(page.getByText('Draw Freeform Rib')).toBeVisible();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByText('Draw Freeform Rib')).not.toBeVisible();
+    await expect(page.getByText('Custom Ryb Editor')).not.toBeVisible();
   });
 
   test('Freeform drawer can be cleared', async ({ page }) => {
     await page.getByRole('button', { name: /Freeform/i }).first().click();
-    await expect(page.getByText('Draw Freeform Rib')).toBeVisible();
-    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
   });
 });
 

@@ -53,6 +53,36 @@ interface FreeformRibPoint {
   y: number
 }
 
+type CurveType = 'line' | 'bezier'
+
+interface BezierControlPoint {
+  x: number
+  y: number
+}
+
+interface CurveSegment {
+  type: CurveType
+  start: BezierControlPoint
+  end: BezierControlPoint
+  control1?: BezierControlPoint
+  control2?: BezierControlPoint
+}
+
+interface CustomRyb {
+  id: string
+  name: string
+  segments: CurveSegment[]
+  depth: number
+}
+
+interface CustomRybSequence {
+  rybs: CustomRyb[]
+  spacingType: 'even' | 'custom'
+  customSpacing?: number
+  interpolation: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out'
+  selectedIndex: number
+}
+
 const MATERIALS = [
   { id: 'mdf', name: 'Premium MDF', price: 45, color: '#E8E4DC', roughness: 0.8 },
   { id: 'birch-plywood', name: 'Birch Plywood', price: 65, color: '#D4B896', roughness: 0.6 },
@@ -564,6 +594,324 @@ function AxisDimensionControl({ label, axisDim, onPhysicalChange, onFactorChange
   )
 }
 
+function generateId(): string {
+  return Math.random().toString(36).substr(2, 9)
+}
+
+function createDefaultRyb(index: number): CustomRyb {
+  const baseX = 50 + index * 30
+  return {
+    id: generateId(),
+    name: `Ryb ${index + 1}`,
+    depth: 20,
+    segments: [
+      { type: 'line', start: { x: 0, y: 0 }, end: { x: 0, y: 80 } },
+      { type: 'bezier', start: { x: 0, y: 80 }, end: { x: 60, y: 40 }, control1: { x: 10, y: 100 }, control2: { x: 40, y: 100 } },
+      { type: 'bezier', start: { x: 60, y: 40 }, end: { x: 0, y: 0 }, control1: { x: 80, y: 0 }, control2: { x: 20, y: -20 } },
+    ]
+  }
+}
+
+function getCurvePoints(segment: CurveSegment, resolution: number = 20): BezierControlPoint[] {
+  const points: BezierControlPoint[] = []
+  
+  if (segment.type === 'line') {
+    points.push(segment.start, segment.end)
+  } else if (segment.type === 'bezier' && segment.control1 && segment.control2) {
+    for (let i = 0; i <= resolution; i++) {
+      const t = i / resolution
+      const x = Math.pow(1-t, 3) * segment.start.x + 
+                3 * Math.pow(1-t, 2) * t * segment.control1.x + 
+                3 * (1-t) * Math.pow(t, 2) * segment.control2.x + 
+                Math.pow(t, 3) * segment.end.x
+      const y = Math.pow(1-t, 3) * segment.start.y + 
+                3 * Math.pow(1-t, 2) * t * segment.control1.y + 
+                3 * (1-t) * Math.pow(t, 2) * segment.control2.y + 
+                Math.pow(t, 3) * segment.end.y
+      points.push({ x, y })
+    }
+  }
+  
+  return points
+}
+
+function getAllPointsFromRyb(ryb: CustomRyb): BezierControlPoint[] {
+  const allPoints: BezierControlPoint[] = []
+  ryb.segments.forEach(seg => {
+    allPoints.push(...getCurvePoints(seg))
+  })
+  return allPoints
+}
+
+function CustomRybEditor({ onClose }: { onClose: () => void }) {
+  const [sequence, setSequence] = useState<CustomRybSequence>({
+    rybs: [createDefaultRyb(0)],
+    spacingType: 'even',
+    interpolation: 'linear',
+    selectedIndex: 0
+  })
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [selectedPoint, setSelectedPoint] = useState<{rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2'} | null>(null)
+  const [dragging, setDragging] = useState(false)
+
+  const currentRyb = sequence.rybs[sequence.selectedIndex]
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    const ryb = sequence.rybs[sequence.selectedIndex]
+    let closestDist = 20
+    let closest: {rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2'} | null = null
+    
+    ryb.segments.forEach((seg, segIdx) => {
+      const checkPoint = (pt: BezierControlPoint, type: 'start' | 'end' | 'control1' | 'control2') => {
+        const dist = Math.sqrt(Math.pow(pt.x - x, 2) + Math.pow(pt.y - y, 2))
+        if (dist < closestDist) {
+          closestDist = dist
+          closest = { rybIndex: sequence.selectedIndex, segmentIndex: segIdx, pointType: type }
+        }
+      }
+      checkPoint(seg.start, 'start')
+      checkPoint(seg.end, 'end')
+      if (seg.control1) checkPoint(seg.control1, 'control1')
+      if (seg.control2) checkPoint(seg.control2, 'control2')
+    })
+    
+    setSelectedPoint(closest)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!selectedPoint || !dragging) return
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    
+    const newRybs = [...sequence.rybs]
+    const ryb = { ...newRybs[selectedPoint.rybIndex] }
+    const segment = { ...ryb.segments[selectedPoint.segmentIndex] }
+    
+    if (selectedPoint.pointType === 'start') segment.start = { x, y }
+    else if (selectedPoint.pointType === 'end') segment.end = { x, y }
+    else if (selectedPoint.pointType === 'control1' && segment.control1) segment.control1 = { x, y }
+    else if (selectedPoint.pointType === 'control2' && segment.control2) segment.control2 = { x, y }
+    
+    ryb.segments[selectedPoint.segmentIndex] = segment
+    newRybs[selectedPoint.rybIndex] = ryb
+    setSequence(prev => ({ ...prev, rybs: newRybs }))
+  }
+
+  const addRyb = () => {
+    const newRyb = createDefaultRyb(sequence.rybs.length)
+    setSequence(prev => ({
+      ...prev,
+      rybs: [...prev.rybs, newRyb],
+      selectedIndex: prev.rybs.length
+    }))
+  }
+
+  const deleteRyb = (index: number) => {
+    if (sequence.rybs.length <= 1) return
+    const newRybs = sequence.rybs.filter((_, i) => i !== index)
+    setSequence(prev => ({
+      ...prev,
+      rybs: newRybs,
+      selectedIndex: Math.min(prev.selectedIndex, newRybs.length - 1)
+    }))
+  }
+
+  const addSegment = () => {
+    const newRybs = [...sequence.rybs]
+    const ryb = { ...newRybs[sequence.selectedIndex] }
+    const lastSegment = ryb.segments[ryb.segments.length - 1]
+    ryb.segments.push({
+      type: 'line',
+      start: { ...lastSegment.end },
+      end: { x: lastSegment.end.x + 30, y: lastSegment.end.y - 20 }
+    })
+    newRybs[sequence.selectedIndex] = ryb
+    setSequence(prev => ({ ...prev, rybs: newRybs }))
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    ctx.fillStyle = '#C67B5C'
+    ctx.fillRect(0, 0, 4, canvas.height)
+    ctx.font = '12px DM Sans'
+    ctx.fillStyle = '#C67B5C'
+    ctx.fillText('← Wall', 10, 20)
+    
+    const ryb = sequence.rybs[sequence.selectedIndex]
+    const allPoints = getAllPointsFromRyb(ryb)
+    
+    if (allPoints.length > 0) {
+      ctx.strokeStyle = '#2C2A26'
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(allPoints[0].x, allPoints[0].y)
+      allPoints.forEach(p => ctx.lineTo(p.x, p.y))
+      ctx.closePath()
+      ctx.stroke()
+      ctx.fillStyle = 'rgba(44, 42, 38, 0.1)'
+      ctx.fill()
+    }
+    
+    ryb.segments.forEach((seg, segIdx) => {
+      const drawPoint = (pt: BezierControlPoint, type: string, isSelected: boolean) => {
+        ctx.beginPath()
+        ctx.arc(pt.x, pt.y, isSelected ? 8 : 6, 0, Math.PI * 2)
+        ctx.fillStyle = isSelected ? '#C67B5C' : (type === 'control' ? '#8B5A3C' : '#2C2A26')
+        ctx.fill()
+        if (isSelected) {
+          ctx.strokeStyle = '#fff'
+          ctx.lineWidth = 2
+          ctx.stroke()
+        }
+      }
+      
+      if (seg.control1) {
+        ctx.strokeStyle = '#8B5A3C'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(seg.start.x, seg.start.y)
+        ctx.lineTo(seg.control1.x, seg.control1.y)
+        ctx.stroke()
+        ctx.setLineDash([])
+        drawPoint(seg.control1, 'control', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'control1')
+      }
+      
+      if (seg.control2) {
+        ctx.strokeStyle = '#8B5A3C'
+        ctx.lineWidth = 1
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(seg.end.x, seg.end.y)
+        ctx.lineTo(seg.control2.x, seg.control2.y)
+        ctx.stroke()
+        ctx.setLineDash([])
+        drawPoint(seg.control2, 'control', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'control2')
+      }
+      
+      drawPoint(seg.start, 'endpoint', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'start')
+      drawPoint(seg.end, 'endpoint', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'end')
+    })
+  }, [sequence, selectedPoint])
+
+  const convertToFreeformPoints = (): FreeformRibPoint[] => {
+    const ryb = sequence.rybs[sequence.selectedIndex]
+    const points = getAllPointsFromRyb(ryb)
+    return points.map(p => ({ x: p.x * 2, y: p.y * 2 }))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/50 overflow-auto">
+      <div className="bg-cream rounded-2xl p-6 max-w-3xl w-full mx-4 my-8 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-display text-xl text-charcoal">Custom Ryb Editor</h3>
+          <button onClick={onClose} className="text-stone hover:text-charcoal">✕</button>
+        </div>
+        
+        <p className="text-warm-gray text-sm mb-4">Edit bezier curves and lines. Click points to select and drag to move. The flat back edge is on the left.</p>
+        
+        <div className="flex gap-2 mb-4">
+          {sequence.rybs.map((ryb, idx) => (
+            <button
+              key={ryb.id}
+              onClick={() => setSequence(prev => ({ ...prev, selectedIndex: idx }))}
+              className={`px-3 py-1.5 text-sm rounded-lg transition-all ${sequence.selectedIndex === idx ? 'bg-charcoal text-cream' : 'bg-stone/10 text-charcoal hover:bg-stone/20'}`}
+            >
+              {ryb.name}
+            </button>
+          ))}
+          <button onClick={addRyb} className="px-3 py-1.5 text-sm rounded-lg bg-oak/20 text-charcoal hover:bg-oak/30">+ Add</button>
+        </div>
+        
+        <div className="flex gap-2 mb-4">
+          <button onClick={addSegment} className="px-3 py-1.5 text-sm rounded-lg bg-stone/10 text-charcoal hover:bg-stone/20">+ Add Segment</button>
+          {sequence.rybs.length > 1 && (
+            <button onClick={() => deleteRyb(sequence.selectedIndex)} className="px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 hover:bg-red-200">Delete Ryb</button>
+          )}
+        </div>
+        
+        <canvas 
+          ref={canvasRef} 
+          width={500} 
+          height={300} 
+          className="w-full border border-stone/20 rounded-lg bg-white cursor-crosshair"
+          onClick={handleCanvasClick}
+          onMouseMove={handleMouseMove}
+          onMouseUp={() => setDragging(false)}
+          onMouseLeave={() => setDragging(false)}
+        />
+        
+        <div className="grid grid-cols-3 gap-4 mt-4">
+          <div>
+            <label className="text-xs text-warm-gray block mb-1">Spacing</label>
+            <select 
+              value={sequence.spacingType}
+              onChange={(e) => setSequence(prev => ({ ...prev, spacingType: e.target.value as 'even' | 'custom' }))}
+              className="w-full px-3 py-2 text-sm bg-white border border-stone/20 rounded-lg"
+            >
+              <option value="even">Evenly Spaced</option>
+              <option value="custom">Custom Spacing</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-warm-gray block mb-1">Interpolation</label>
+            <select 
+              value={sequence.interpolation}
+              onChange={(e) => setSequence(prev => ({ ...prev, interpolation: e.target.value as CustomRybSequence['interpolation'] }))}
+              className="w-full px-3 py-2 text-sm bg-white border border-stone/20 rounded-lg"
+            >
+              <option value="linear">Linear</option>
+              <option value="ease-in">Ease In</option>
+              <option value="ease-out">Ease Out</option>
+              <option value="ease-in-out">Ease In-Out</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-warm-gray block mb-1">Ryb Count</label>
+            <input 
+              type="number" 
+              min={1}
+              max={30}
+              value={sequence.rybs.length}
+              onChange={(e) => {
+                const count = parseInt(e.target.value) || 1
+                const newRybs = [...sequence.rybs]
+                while (newRybs.length < count) newRybs.push(createDefaultRyb(newRybs.length))
+                while (newRybs.length > count) newRybs.pop()
+                setSequence(prev => ({ ...prev, rybs: newRybs }))
+              }}
+              className="w-full px-3 py-2 text-sm bg-white border border-stone/20 rounded-lg"
+            />
+          </div>
+        </div>
+        
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-stone hover:text-charcoal">Cancel</button>
+          <button onClick={() => {
+            const points = convertToFreeformPoints()
+            onClose()
+          }} className="flex-1 px-4 py-2 bg-charcoal text-cream rounded-lg hover:bg-stone">Save & Use</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FreeformDrawer({ onSave, onClose }: { onSave: (points: FreeformRibPoint[]) => void, onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [points, setPoints] = useState<FreeformRibPoint[]>([])
@@ -658,7 +1006,7 @@ function App() {
   
   const [activeSection, setActiveSection] = useState('design')
   const [activePreset, setActivePreset] = useState('gentle')
-  const [ribViewMode, setRibViewMode] = useState<ViewMode>('side')
+  const [ribViewMode, setRibViewMode] = useState<ViewMode>('3d')
   const [shelfViewMode, setShelfViewMode] = useState<ViewMode>('3d')
   const [showExport, setShowExport] = useState(false)
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
@@ -1009,7 +1357,7 @@ function App() {
       )}
 
       {/* Freeform Drawer */}
-      {showFreeformDrawer && <FreeformDrawer onSave={(points) => { setFreeformPoints(points); setShowFreeformDrawer(false) }} onClose={() => setShowFreeformDrawer(false)} />}
+      {showFreeformDrawer && <CustomRybEditor onClose={() => setShowFreeformDrawer(false)} />}
 
       {/* Footer */}
       <footer className="bg-charcoal text-cream py-8">
