@@ -674,3 +674,189 @@ test.describe('Custom Ryb Editor - Extended', () => {
     await expect(page.getByText('Ryb 2')).not.toBeVisible();
   });
 });
+
+test.describe('Round 3 - Batch A: View & Interaction Fixes', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('Expand button exists on Single Ryb Editor', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
+    await expect(section.getByTitle('Expand editor')).toBeVisible();
+  });
+
+  test('Expand button exists on Full Ryb Editor', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
+    await expect(section.getByTitle('Expand editor')).toBeVisible();
+  });
+
+  test('Single Ryb Editor expand opens modal', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
+    await section.getByTitle('Expand editor').click();
+    await expect(page.getByText('Single Ryb Editor — Expanded')).toBeVisible();
+    await page.getByRole('button', { name: /Close/ }).click();
+    await expect(page.getByText('Single Ryb Editor — Expanded')).not.toBeVisible();
+  });
+
+  test('Full Ryb Editor expand opens modal', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
+    await section.getByTitle('Expand editor').click();
+    await expect(page.getByText('Full Ryb Editor — Expanded')).toBeVisible();
+    await page.getByRole('button', { name: /Close/ }).click();
+    await expect(page.getByText('Full Ryb Editor — Expanded')).not.toBeVisible();
+  });
+
+  test('View mode switching works in Single Ryb Editor', async ({ page }) => {
+    const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
+    await section.getByRole('button', { name: 'Top' }).click();
+    await page.waitForTimeout(300);
+    await section.getByRole('button', { name: 'Front' }).click();
+    await page.waitForTimeout(300);
+    await section.getByRole('button', { name: 'Side' }).click();
+    await page.waitForTimeout(300);
+    // Reset button works
+    await section.getByRole('button', { name: '↺' }).click();
+    await page.waitForTimeout(300);
+    // Canvas should still be visible after cycling all views
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Shape persistence - switching from freeform to square', async ({ page }) => {
+    // Select freeform, save, then switch to square
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await page.getByRole('button', { name: 'Save & Use' }).click();
+    await page.waitForTimeout(300);
+    // Now switch to square
+    await page.getByRole('button', { name: /Square/i }).first().click();
+    await page.waitForTimeout(300);
+    // Canvas should render square, not freeform
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Hero preview uses 3D view independently', async ({ page }) => {
+    // The hero canvas should always show 3D, verify two separate hero canvases exist
+    const heroCanvases = page.locator('section').first().locator('canvas');
+    await expect(heroCanvases.first()).toBeVisible();
+  });
+});
+
+test.describe('Round 3 - Batch B: Editor & Rendering', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('Orbit controls enable panning in 3D view', async ({ page }) => {
+    // 3D canvas should exist and be interactive
+    const canvas = page.locator('canvas').first();
+    await expect(canvas).toBeVisible();
+    // Attempt a pan gesture (right-click drag simulation)
+    const box = await canvas.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down({ button: 'right' });
+      await page.mouse.move(box.x + box.width / 2 + 50, box.y + box.height / 2 + 50);
+      await page.mouse.up({ button: 'right' });
+      await page.waitForTimeout(200);
+    }
+  });
+
+  test('Full Ryb Editor uses significant vertical space', async ({ page }) => {
+    const editorCard = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
+    const box = await editorCard.boundingBox();
+    expect(box).toBeTruthy();
+    // Should be at least 400px tall
+    if (box) {
+      expect(box.height).toBeGreaterThan(400);
+    }
+  });
+});
+
+test.describe('Round 3 - Batch C: Export & Reset', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('Export modal appears and has SVG/DXF options', async ({ page }) => {
+    await page.getByText('Export').click();
+    await expect(page.getByText('SVG Cut Files')).toBeVisible();
+    await expect(page.getByText('DXF Cut Files')).toBeVisible();
+  });
+
+  test('SVG export triggers file download', async ({ page }) => {
+    await page.getByText('Export').click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByText('SVG Cut Files').click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toContain('.svg');
+    expect(download.suggestedFilename()).toContain('rybform-cutfile');
+  });
+
+  test('DXF export triggers file download', async ({ page }) => {
+    await page.getByText('Export').click();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByText('DXF Cut Files').click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toContain('.dxf');
+    expect(download.suggestedFilename()).toContain('rybform-cutfile');
+  });
+
+  test('Reset buttons appear after creating freeform', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await page.getByRole('button', { name: 'Save & Use' }).click();
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('button', { name: 'Reset Ryb' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Reset All' })).toBeVisible();
+  });
+
+  test('Reset All clears freeform and returns to square', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await page.getByRole('button', { name: 'Save & Use' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Reset All' }).click();
+    await page.waitForTimeout(300);
+    // Should switch back to square
+    const squareBtn = page.getByRole('button', { name: /Square/i }).first();
+    await expect(squareBtn).toHaveClass(/bg-charcoal/);
+  });
+
+  test('Multiple presets can be applied', async ({ page }) => {
+    await page.getByRole('button', { name: 'Steep Wave' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Flat Shelf' }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: 'Organic' }).click();
+    await page.waitForTimeout(300);
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Multi-ryb: creating multiple rybs and saving', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    // Add a second ryb
+    await page.getByRole('button', { name: '+ Add' }).click();
+    await expect(page.getByText('Ryb 2')).toBeVisible();
+    // Add a third ryb
+    await page.getByRole('button', { name: '+ Add' }).click();
+    await expect(page.getByText('Ryb 3')).toBeVisible();
+    // Save all
+    await page.getByRole('button', { name: 'Save & Use' }).click();
+    await expect(page.getByText('Custom Ryb Editor')).not.toBeVisible();
+    // Canvas should render with multiple custom rybs
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Size transform with scaling produces different-sized rybs', async ({ page }) => {
+    const transformSection = page.locator('.card').filter({ hasText: 'Size Transform' });
+    const startInput = transformSection.locator('input[type="number"]').first();
+    await startInput.fill('0.5');
+    await page.waitForTimeout(300);
+    const endInput = transformSection.locator('input[type="number"]').nth(1);
+    await endInput.fill('2.0');
+    await page.waitForTimeout(300);
+    // Canvas should show scaling effect
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+});

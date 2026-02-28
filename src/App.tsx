@@ -1208,7 +1208,101 @@ function App() {
 
   const handleExport = (format: 'svg' | 'dxf') => {
     setIsExporting(true)
-    setTimeout(() => { setIsExporting(false); setShowExport(false) }, 500)
+    try {
+      const widthMM = toMM(params.ribX.physical) * params.ribX.factor
+      const heightMM = toMM(params.ribY.physical) * params.ribY.factor
+      const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
+      const sheetW = 1220 // A0-ish sheet width mm
+      const sheetH = 2440
+      const padding = 10
+      const cols = Math.floor(sheetW / (widthMM + padding))
+
+      // Generate profile paths for each rib
+      const profiles: string[] = []
+      for (let i = 0; i < params.ribCount; i++) {
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        const ox = col * (widthMM + padding) + padding
+        const oy = row * (heightMM + padding) + padding
+
+        const transform = interpolateTransform(params.sizeTransforms, i / Math.max(params.ribCount - 1, 1))
+        const sw = widthMM * transform.scaleX
+        const sh = heightMM * transform.scaleY
+
+        if (params.ribShape === 'circle') {
+          profiles.push(`<ellipse cx="${ox + sw / 2}" cy="${oy + sh / 2}" rx="${sw / 2}" ry="${sh / 2}" fill="none" stroke="black" stroke-width="0.5"/>`)
+          profiles.push(`<text x="${ox + sw / 2}" y="${oy + sh / 2}" font-size="8" text-anchor="middle" fill="#666">${i + 1}</text>`)
+        } else if (params.ribShape === 'freeform' && freeformPoints.length > 2) {
+          const minX = Math.min(...freeformPoints.map(p => p.x))
+          const maxX = Math.max(...freeformPoints.map(p => p.x))
+          const minY = Math.min(...freeformPoints.map(p => p.y))
+          const maxY = Math.max(...freeformPoints.map(p => p.y))
+          const rangeX = maxX - minX || 1
+          const rangeY = maxY - minY || 1
+          const pts = freeformPoints.map(p => `${ox + ((p.x - minX) / rangeX) * sw},${oy + ((p.y - minY) / rangeY) * sh}`).join(' ')
+          profiles.push(`<polygon points="${pts}" fill="none" stroke="black" stroke-width="0.5"/>`)
+          profiles.push(`<text x="${ox + sw / 2}" y="${oy + sh / 2}" font-size="8" text-anchor="middle" fill="#666">${i + 1}</text>`)
+        } else {
+          profiles.push(`<rect x="${ox}" y="${oy}" width="${sw}" height="${sh}" fill="none" stroke="black" stroke-width="0.5"/>`)
+          profiles.push(`<text x="${ox + sw / 2}" y="${oy + sh / 2}" font-size="8" text-anchor="middle" fill="#666">${i + 1}</text>`)
+        }
+      }
+
+      if (format === 'svg') {
+        const totalRows = Math.ceil(params.ribCount / cols)
+        const svgH = totalRows * (heightMM + padding) + padding
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${sheetW}mm" height="${svgH}mm" viewBox="0 0 ${sheetW} ${svgH}">\n  <rect width="${sheetW}" height="${svgH}" fill="white" stroke="#ccc" stroke-width="0.5"/>\n  ${profiles.join('\n  ')}\n</svg>`
+        const blob = new Blob([svg], { type: 'image/svg+xml' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = `rybform-cutfile-${params.ribCount}rybs.svg`; a.click()
+        URL.revokeObjectURL(url)
+      } else {
+        // DXF generation (basic AC1009 format)
+        let dxf = '0\nSECTION\n2\nENTITIES\n'
+        for (let i = 0; i < params.ribCount; i++) {
+          const col = i % cols
+          const row = Math.floor(i / cols)
+          const ox = col * (widthMM + padding) + padding
+          const oy = row * (heightMM + padding) + padding
+          const transform = interpolateTransform(params.sizeTransforms, i / Math.max(params.ribCount - 1, 1))
+          const sw = widthMM * transform.scaleX
+          const sh = heightMM * transform.scaleY
+
+          if (params.ribShape === 'circle') {
+            dxf += `0\nELLIPSE\n8\n0\n10\n${ox + sw / 2}\n20\n${oy + sh / 2}\n30\n0\n11\n${sw / 2}\n21\n0\n31\n0\n40\n${sh / sw}\n41\n0\n42\n${Math.PI * 2}\n`
+          } else {
+            // Rectangle as LINE entities
+            const corners = [[ox, oy], [ox + sw, oy], [ox + sw, oy + sh], [ox, oy + sh]]
+            for (let j = 0; j < 4; j++) {
+              const [x1, y1] = corners[j]
+              const [x2, y2] = corners[(j + 1) % 4]
+              dxf += `0\nLINE\n8\n0\n10\n${x1}\n20\n${y1}\n30\n0\n11\n${x2}\n21\n${y2}\n31\n0\n`
+            }
+          }
+        }
+        dxf += '0\nENDSEC\n0\nEOF\n'
+        const blob = new Blob([dxf], { type: 'application/dxf' })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url; a.download = `rybform-cutfile-${params.ribCount}rybs.dxf`; a.click()
+        URL.revokeObjectURL(url)
+      }
+    } finally {
+      setIsExporting(false)
+      setShowExport(false)
+    }
+  }
+
+  const handleResetRyb = () => {
+    setFreeformPoints([])
+    setCustomRybSequence(null)
+  }
+
+  const handleResetAllRybs = () => {
+    setFreeformPoints([])
+    setCustomRybSequence(null)
+    setParams(prev => ({ ...prev, ribShape: 'square' }))
   }
 
   return (
@@ -1337,6 +1431,12 @@ function App() {
                       </button>
                     ))}
                   </div>
+                  {(freeformPoints.length > 0 || customRybSequence) && (
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={handleResetRyb} className="flex-1 px-3 py-1.5 text-xs bg-cream text-stone rounded-lg hover:bg-stone/10 transition-all">Reset Ryb</button>
+                      <button onClick={handleResetAllRybs} className="flex-1 px-3 py-1.5 text-xs bg-terracotta/10 text-terracotta rounded-lg hover:bg-terracotta/20 transition-all">Reset All</button>
+                    </div>
+                  )}
                   <div className="mt-4 pt-4 border-t border-stone/10">
                     <label className="flex items-center gap-3 cursor-pointer">
                       <input type="checkbox" checked={params.flatEdge} onChange={(e) => handleParamChange('flatEdge', e.target.checked)} className="w-5 h-5 rounded border-stone/30 text-charcoal focus:ring-charcoal" />
