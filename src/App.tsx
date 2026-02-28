@@ -526,6 +526,24 @@ function ZoomToFit({ boundingBox, viewMode, target }: { boundingBox: { width: nu
   return null
 }
 
+// Gentle auto-rotating camera sweep for preview canvases
+function CameraSweep({ enabled = true }: { enabled?: boolean }) {
+  const { camera } = useThree()
+  const initialPos = useRef<THREE.Vector3 | null>(null)
+
+  useFrame((_, delta) => {
+    if (!enabled) return
+    if (!initialPos.current) initialPos.current = camera.position.clone()
+    const time = Date.now() * 0.001 * SITE_CONFIG.cameraSweepSpeed
+    const amp = SITE_CONFIG.cameraSweepAmplitude
+    camera.position.x = initialPos.current.x + Math.sin(time) * amp * initialPos.current.length() * 0.1
+    camera.position.y = initialPos.current.y + Math.cos(time * 0.7) * amp * initialPos.current.length() * 0.05
+    camera.lookAt(0, 0, 0)
+  })
+
+  return null
+}
+
 function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
   const widthMM = toMM(params.ribX.physical) * params.ribX.factor
   const heightMM = toMM(params.ribY.physical) * params.ribY.factor
@@ -565,7 +583,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence }: { params: Shel
   }, [geometries])
 
   const material = useMemo(() => {
-    const mat = new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide })
+    const mat = new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
     materialRef.current = mat
     return mat
   }, [selectedMaterial])
@@ -583,7 +601,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence }: { params: Shel
   )
 }
 
-function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRib = false, canvasId }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null, isSingleRib?: boolean, canvasId?: string }) {
+function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRib = false, canvasId, autoSweep = false, enableOrbit = true }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null, isSingleRib?: boolean, canvasId?: string, autoSweep?: boolean, enableOrbit?: boolean }) {
   const lengthMM = toMM(params.length)
   const heightMM = toMM(params.height)
   const cameraDistance = Math.max(lengthMM, heightMM) * 1.5
@@ -607,10 +625,11 @@ function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRi
       </Float>
 
       <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} />
+      {autoSweep && viewMode === '3d' && <CameraSweep />}
 
       <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
 
-      {viewMode === '3d' && <OrbitControls enablePan={false} enableDamping dampingFactor={0.05} minDistance={20} maxDistance={200} makeDefault />}
+      {enableOrbit && viewMode === '3d' && <OrbitControls enablePan enableDamping dampingFactor={0.05} minDistance={20} maxDistance={500} makeDefault />}
       {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 100, 0]} zoom={10} near={1} far={500} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 100]} zoom={10} near={1} far={500} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'side' && <OrthographicCamera makeDefault position={[100, 0, 0]} zoom={10} near={1} far={500} onUpdate={c => c.lookAt(0, 0, 0)} />}
@@ -1117,6 +1136,8 @@ function App() {
   const [isExporting, setIsExporting] = useState(false)
   const [cyclingRybIndex, setCyclingRybIndex] = useState(0)
   const [cyclingFadeIn, setCyclingFadeIn] = useState(true)
+  const [expandedRibEditor, setExpandedRibEditor] = useState(false)
+  const [expandedShelfEditor, setExpandedShelfEditor] = useState(false)
 
   // Only pass freeform points when shape is actually freeform
   const activeFreeformPoints = params.ribShape === 'freeform' ? freeformPoints : undefined
@@ -1222,14 +1243,14 @@ function App() {
             <div className="relative h-[350px]">
               <div className="absolute inset-0">
                 <Canvas shadows camera={{ position: [10, 8, 15], fov: 45 }}>
-                  <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="hero-canvas" />
+                  <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="hero-canvas" autoSweep enableOrbit={false} />
                 </Canvas>
               </div>
               {/* Top Right Mini Preview - Cycling Single Ryb */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-cream/90 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-charcoal/10 shadow-lg">
                 <div style={{ opacity: cyclingFadeIn ? 1 : 0, transition: `opacity ${SITE_CONFIG.previewFadeDurationMs}ms ease-in-out` }} className="w-full h-full">
                   <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
-                    <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} isSingleRib={true} canvasId="mini-canvas" />
+                    <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} isSingleRib={true} canvasId="mini-canvas" autoSweep enableOrbit={false} />
                   </Canvas>
                 </div>
               </div>
@@ -1245,13 +1266,16 @@ function App() {
               <div className="card">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-display text-base text-charcoal">Single Ryb Editor</h3>
-                  <div className="flex gap-1 bg-cream rounded-lg p-1">
-                    {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
-                      <button key={mode} onClick={() => setRibViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${ribViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
-                        {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
-                      </button>
-                    ))}
-                    <button onClick={() => setRibViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1 bg-cream rounded-lg p-1">
+                      {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
+                        <button key={mode} onClick={() => setRibViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${ribViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                          {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                        </button>
+                      ))}
+                      <button onClick={() => setRibViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                    </div>
+                    <button onClick={() => setExpandedRibEditor(true)} className="px-2 py-1 text-xs rounded-md text-stone hover:text-charcoal hover:bg-cream transition-all" title="Expand editor">⤢</button>
                   </div>
                 </div>
                 <div className="flex gap-6 items-start">
@@ -1346,13 +1370,16 @@ function App() {
                   <div className="card h-full min-h-[450px] flex flex-col" style={{ minHeight: '50vh' }}>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-display text-base text-charcoal">Full Ryb Editor</h3>
-                      <div className="flex gap-1 bg-cream rounded-lg p-1">
-                        {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
-                          <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
-                            {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
-                          </button>
-                        ))}
-                        <button onClick={() => setShelfViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1 bg-cream rounded-lg p-1">
+                          {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
+                            <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                              {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                            </button>
+                          ))}
+                          <button onClick={() => setShelfViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                        </div>
+                        <button onClick={() => setExpandedShelfEditor(true)} className="px-2 py-1 text-xs rounded-md text-stone hover:text-charcoal hover:bg-cream transition-all" title="Expand editor">⤢</button>
                       </div>
                     </div>
                     <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative" style={{ minHeight: '350px' }}>
@@ -1490,6 +1517,60 @@ function App() {
 
       {/* Freeform Drawer */}
       {showFreeformDrawer && <CustomRybEditor onSave={(points, sequence) => { setFreeformPoints(points); setCustomRybSequence(sequence); setShowFreeformDrawer(false) }} onClose={() => setShowFreeformDrawer(false)} />}
+
+      {/* Expanded Single Ryb Editor Modal */}
+      {expandedRibEditor && (
+        <div className="fixed inset-0 z-50 bg-charcoal/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-ivory rounded-2xl w-full h-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-stone/10">
+              <h3 className="font-display text-lg text-charcoal">Single Ryb Editor — Expanded</h3>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1 bg-cream rounded-lg p-1">
+                  {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
+                    <button key={mode} onClick={() => setRibViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${ribViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                      {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
+                  <button onClick={() => setRibViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                </div>
+                <button onClick={() => setExpandedRibEditor(false)} className="px-3 py-1 text-sm rounded-md bg-charcoal text-cream hover:bg-stone transition-all">✖ Close</button>
+              </div>
+            </div>
+            <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10">
+              <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
+                <Scene params={params} viewMode={ribViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="rib-expanded" />
+              </Canvas>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expanded Full Ryb Editor Modal */}
+      {expandedShelfEditor && (
+        <div className="fixed inset-0 z-50 bg-charcoal/80 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-ivory rounded-2xl w-full h-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between p-4 border-b border-stone/10">
+              <h3 className="font-display text-lg text-charcoal">Full Ryb Editor — Expanded</h3>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-1 bg-cream rounded-lg p-1">
+                  {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
+                    <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
+                      {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
+                  <button onClick={() => setShelfViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                </div>
+                <button onClick={() => setExpandedShelfEditor(false)} className="px-3 py-1 text-sm rounded-md bg-charcoal text-cream hover:bg-stone transition-all">✖ Close</button>
+              </div>
+            </div>
+            <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10">
+              <Canvas shadows camera={{ position: [10, 8, 15], fov: 45 }}>
+                <Scene params={params} viewMode={shelfViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="shelf-expanded" />
+              </Canvas>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-charcoal text-cream py-8">
