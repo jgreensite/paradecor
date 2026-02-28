@@ -1,0 +1,1 @@
+import ezdxf, sys; from ezdxf.path import make_paths_from_entities, make_path; def run(f): d=ezdxf.readfile(f); msp=d.modelspace(); ents=[e for e in msp if e.dxftype() in ('LINE','ARC')]; paths=list(make_paths_from_entities(ents)); print(len(paths)); run(sys.argv[1]) if len(sys.argv)>1 else None

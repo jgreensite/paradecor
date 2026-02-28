@@ -45,6 +45,8 @@ interface ShelfParams {
   sizeTransforms: RibSizeTransform[]
   flatEdge: boolean
   backplaneEnabled: boolean
+  backplaneShape: 'rectangular' | 'stadium' | 'organic'
+  backplaneOrganicOffset: number
   backplaneMaterialThickness: number
   backplaneSlotDepth: number
   backplaneDogboneRadius: number
@@ -1127,6 +1129,8 @@ function App() {
     sizeTransforms: [],
     flatEdge: true,
     backplaneEnabled: true,
+    backplaneShape: 'rectangular',
+    backplaneOrganicOffset: 20,
     backplaneMaterialThickness: 12,
     backplaneSlotDepth: 60,
     backplaneDogboneRadius: 6.5,
@@ -1248,6 +1252,8 @@ function App() {
         rybProfiles,
         {
           enabled: params.backplaneEnabled,
+          shape: params.backplaneShape,
+          organicOffset: params.backplaneOrganicOffset,
           materialThickness: params.backplaneMaterialThickness,
           slotDepth: params.backplaneSlotDepth,
           dogboneRadius: params.backplaneDogboneRadius,
@@ -1565,6 +1571,19 @@ function App() {
                     {params.backplaneEnabled && (
                       <>
                         <div>
+                          <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Shape</span></label>
+                          <select value={params.backplaneShape} onChange={(e) => handleParamChange('backplaneShape', e.target.value)} className="w-full px-2 py-1.5 text-sm rounded bg-cream border border-stone/20">
+                            <option value="rectangular">Rectangular</option>
+                            <option value="organic">Organic Wave</option>
+                          </select>
+                        </div>
+                        {params.backplaneShape === 'organic' && (
+                          <div>
+                            <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Organic Offset</span><span className="text-charcoal font-medium">{params.backplaneOrganicOffset}mm</span></label>
+                            <input type="range" min={0} max={100} step={2} value={params.backplaneOrganicOffset} onChange={(e) => handleParamChange('backplaneOrganicOffset', Number(e.target.value))} className="w-full accent-charcoal" />
+                          </div>
+                        )}
+                        <div className="pt-2">
                           <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Material Thickness</span><span className="text-charcoal font-medium">{params.backplaneMaterialThickness}mm</span></label>
                           <input type="range" min={3} max={25} step={0.5} value={params.backplaneMaterialThickness} onChange={(e) => handleParamChange('backplaneMaterialThickness', Number(e.target.value))} className="w-full accent-charcoal" />
                         </div>

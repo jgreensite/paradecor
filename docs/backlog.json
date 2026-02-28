@@ -55,6 +55,13 @@
             "id": "EPIC-08",
             "title": "Ops Tooling & Internal Scripts",
             "description": "Stop using hacky, inline node/python scripts for development tasks. Centralize all ops workflows (start/stop server, parsing test results, test running) into a robust Python CLI (e.g., `para_ops.py`) to streamline local development."
+        },
+        {
+            "id": "EPIC-09",
+            "title": "Organic Backplane Designer & Rib Interlocking",
+            "description": "Recreate the original test CNC file's complex organic backplane shape within the app, and ensure full physical interlocking (slots + tabs on rybs) for manufacturing.",
+            "status": "todo",
+            "priority": "P0"
         }
     ],
     "stories": [
@@ -230,6 +237,50 @@
                 "tooling"
             ],
             "dependencies": []
+        },
+        {
+            "id": "RYB-027",
+            "epic": "EPIC-09",
+            "title": "Organic Backplane Shape Generator",
+            "description": "Mechanism to design an organic curved backplane shape in the software. Must handle the smooth sweep wave profile matching the reference CNC, unlike the current simple rectangular/stadium backplanes.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "backplane",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-028",
+            "epic": "EPIC-09",
+            "title": "Ryb Interlocking Protrusions (Tabs)",
+            "description": "Make each Ryb have a protrusion (tab) that goes into the backplane slot. The tab height must be exactly the thickness of the backplane material.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "rybs",
+                "cnc",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-027"
+            ]
+        },
+        {
+            "id": "RYB-029",
+            "epic": "EPIC-09",
+            "title": "Accurate Reference File Export",
+            "description": "Generate the total DXF using the new organic backplane and tabbed rybs to perfectly recreate the structure of the reference physical parts.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "export",
+                "cnc"
+            ],
+            "dependencies": [
+                "RYB-028"
+            ]
         }
     ]
 }
