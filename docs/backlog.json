@@ -1,0 +1,318 @@
+{
+    "metadata": {
+        "version": "1.0.0",
+        "project": "paradecor",
+        "product": "Rybform",
+        "last_updated": "2026-02-28T07:42:00Z",
+        "linear_team_key": "RYB",
+        "config": {
+            "_comment": "Developer-configurable animation parameters — change values here only",
+            "preview_cycle_interval_ms": 10000,
+            "preview_fade_duration_ms": 800,
+            "camera_sweep_speed": 0.15,
+            "camera_sweep_amplitude": 0.3,
+            "mesh_curve_segments": 32,
+            "mesh_extrude_steps": 1
+        }
+    },
+    "epics": [
+        {
+            "id": "EPIC-01",
+            "title": "Preview & Camera Polish",
+            "description": "Hero section previews: cycling rybs, independent shelf preview, configurable sweep/pan animations"
+        },
+        {
+            "id": "EPIC-02",
+            "title": "Editor UX & Interactions",
+            "description": "Ryb selection in single editor, reset buttons, expand/collapse, gimbal/pan/zoom controls, freeform drawing improvements"
+        },
+        {
+            "id": "EPIC-03",
+            "title": "Rendering Quality",
+            "description": "Fix mesh shimmer artifacts, improve orthographic view zoom math, independent zoom per view"
+        },
+        {
+            "id": "EPIC-04",
+            "title": "Mobile & Responsive Layout",
+            "description": "Improve layout for mobile and tablet breakpoints"
+        },
+        {
+            "id": "EPIC-05",
+            "title": "Testing & Quality",
+            "description": "Expand Playwright test coverage for multi-ryb interpolation, UI interactions, and regression"
+        },
+        {
+            "id": "EPIC-06",
+            "title": "Export & File Output",
+            "description": "Implement SVG/DXF cut file generation from parametric shelf data"
+        }
+    ],
+    "stories": [
+        {
+            "id": "RYB-001",
+            "epic": "EPIC-01",
+            "title": "Mini preview cycles through shelf rybs with fade",
+            "description": "Top-right mini preview should cycle through each ryb in the shelf set every N seconds with a smooth fade in/out transition. Interval and fade duration are developer-configurable.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "preview",
+                "animation"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-002",
+            "epic": "EPIC-01",
+            "title": "Shelf preview independent from Full Ryb Editor view",
+            "description": "The hero shelf preview and the top-right mini preview should not change when the user switches views in the Full Ryb Editor (top/front/side/3d).",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "preview",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-003",
+            "epic": "EPIC-01",
+            "title": "Gentle camera sweep/pan on preview canvases",
+            "description": "Both preview canvases (hero shelf + mini ryb) should have a subtle auto-rotating sweep whose speed and amplitude are developer-configurable.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "preview",
+                "animation"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-004",
+            "epic": "EPIC-03",
+            "title": "Fix mesh shimmer artifacts on complex freeform shapes",
+            "description": "Complex freeform meshes produce visual shimmer/z-fighting. Investigate normals, polygon winding, depth bias, and curve segment count. Make mesh quality params developer-configurable.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "rendering",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-005",
+            "epic": "EPIC-03",
+            "title": "Fix orthographic view zoom math (top/front/side)",
+            "description": "Top/Front/Side views are massively over-zoomed. Compute zoom from bounding box, set independent zoom per view mode. Fix reset button to actually work.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "rendering",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-006",
+            "epic": "EPIC-02",
+            "title": "Select any custom ryb in single ryb editor",
+            "description": "When multiple custom rybs exist, the single ryb editor should let the user pick which one to edit via tabs or a dropdown.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-007",
+            "epic": "EPIC-02",
+            "title": "Reset Ryb and Reset All Rybs buttons",
+            "description": "Add buttons to reset the current ryb to its default shape, and to reset all rybs to defaults.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-006"
+            ]
+        },
+        {
+            "id": "RYB-008",
+            "epic": "EPIC-02",
+            "title": "Standard shapes lost when switching from Freeform",
+            "description": "If the user draws freeform shapes then selects a standard shape (square/circle), the standard shape is lost. Fix shape persistence.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "editor",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-009",
+            "epic": "EPIC-02",
+            "title": "Freeform editor click offset fix",
+            "description": "Users must click above points to select/drag them. Fix the Y-coordinate offset in the freeform canvas hit detection.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "editor",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-010",
+            "epic": "EPIC-02",
+            "title": "Add/convert line and bezier segments in freeform editor",
+            "description": "Currently no way to create a new line or bezier segment or convert between types. Add create and convert controls.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-011",
+            "epic": "EPIC-02",
+            "title": "Default freeform shape more vertically aligned",
+            "description": "The initial freeform shape template should be taller/vertical (shelf-like) rather than wide/horizontal.",
+            "status": "backlog",
+            "priority": "low",
+            "labels": [
+                "editor",
+                "improvement"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-012",
+            "epic": "EPIC-02",
+            "title": "Full Ryb Editor uses full vertical space",
+            "description": "The full ryb editor canvas only uses ~50% of the available vertical space. Make it expand to fill its container.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "layout",
+                "improvement"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-013",
+            "epic": "EPIC-02",
+            "title": "Expand/collapse mode for both editors",
+            "description": "Both Single Ryb Editor and Full Ryb Editor should be expandable to a larger window for detailed work.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-014",
+            "epic": "EPIC-02",
+            "title": "Gimbal, pan, zoom controls in editor top-right",
+            "description": "Add tasteful orbit/pan/zoom control icons in the top-right of each editor canvas with hover highlights.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-013"
+            ]
+        },
+        {
+            "id": "RYB-015",
+            "epic": "EPIC-04",
+            "title": "Mobile layout improvements",
+            "description": "Mobile layout is broken — stack cards vertically, collapse controls, hide non-essential UI, make canvases full-width.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "responsive",
+                "layout"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-016",
+            "epic": "EPIC-04",
+            "title": "Tablet layout improvements",
+            "description": "Tablet breakpoint needs intermediate layout — 2-column where possible, responsive canvas sizing.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "responsive",
+                "layout"
+            ],
+            "dependencies": [
+                "RYB-015"
+            ]
+        },
+        {
+            "id": "RYB-017",
+            "epic": "EPIC-05",
+            "title": "Test multi-ryb interpolation rendering",
+            "description": "Add Playwright tests that verify rendering produces visually distinct rybs when multiple custom rybs are defined with interpolation easing.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "testing"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-018",
+            "epic": "EPIC-05",
+            "title": "Expand UI interaction tests",
+            "description": "Add comprehensive Playwright tests for view switching, slider interactions, shape preservation, freeform editing, and reset buttons.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "testing"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-019",
+            "epic": "EPIC-06",
+            "title": "Implement SVG cut file export",
+            "description": "Generate a flat SVG file with all ryb profiles laid out for CNC cutting, including kerf compensation.",
+            "status": "backlog",
+            "priority": "high",
+            "labels": [
+                "export",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-020",
+            "epic": "EPIC-06",
+            "title": "Implement DXF cut file export",
+            "description": "Generate a DXF file from the same profile data used for SVG, for CAD/CNC software compatibility.",
+            "status": "backlog",
+            "priority": "medium",
+            "labels": [
+                "export",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-019"
+            ]
+        }
+    ]
+}

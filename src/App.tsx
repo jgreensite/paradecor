@@ -112,6 +112,19 @@ const PRESETS = [
   { id: 'organic', name: 'Organic', icon: '🌿', params: { waveHeight: 3, waveFrequency: 2.5, ribCount: 15 } },
 ]
 
+// ── Developer-configurable site parameters ──────────────────────────
+// Change values here — they are referenced throughout the app.
+const SITE_CONFIG = {
+  previewCycleIntervalMs: 10000,
+  previewFadeDurationMs: 800,
+  cameraSweepSpeed: 0.15,
+  cameraSweepAmplitude: 0.3,
+  meshCurveSegments: 32,
+  meshExtrudeSteps: 1,
+  orthoZoomPadding: 1.4,
+  perspectiveZoomMultiplier: 2.0,
+}
+
 const MM_PER_INCH = 25.4
 
 function toMM(dim: DimensionUnit): number {
@@ -462,29 +475,53 @@ function calculateShelfBoundingBox(params: ShelfParams): { width: number, height
 }
 
 function ZoomToFit({ boundingBox, viewMode, target }: { boundingBox: { width: number, height: number, depth: number, center?: THREE.Vector3 }, viewMode: ViewMode, target?: THREE.Vector3 }) {
-  const { camera } = useThree()
+  const { camera, size: canvasSize } = useThree()
 
   useEffect(() => {
     const center = target || boundingBox.center || new THREE.Vector3(0, 0, 0)
-    const size = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) || 50
-
-    const fov = (camera as THREE.PerspectiveCamera).fov || 50
+    const maxDim = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) || 50
+    const padding = SITE_CONFIG.orthoZoomPadding
 
     if (viewMode === '3d') {
-      const distance = size * 2.5
-      camera.position.set(center.x + distance * 0.5, center.y + distance * 0.5, center.z + distance)
+      const distance = maxDim * SITE_CONFIG.perspectiveZoomMultiplier
+      camera.position.set(center.x + distance * 0.5, center.y + distance * 0.4, center.z + distance * 0.8)
       camera.lookAt(center)
-    } else if (viewMode === 'top') {
-      camera.position.set(center.x, center.y + size * 3, center.z)
+    } else {
+      // Orthographic: compute zoom from bounding box and canvas size
+      const aspect = canvasSize.width / canvasSize.height
+      let visibleWidth: number, visibleHeight: number
+
+      if (viewMode === 'top') {
+        visibleWidth = boundingBox.width
+        visibleHeight = boundingBox.depth
+      } else if (viewMode === 'front') {
+        visibleWidth = boundingBox.width
+        visibleHeight = boundingBox.height
+      } else { // side
+        visibleWidth = boundingBox.depth
+        visibleHeight = boundingBox.height
+      }
+
+      // Fit the larger dimension with padding
+      const zoomX = canvasSize.width / ((visibleWidth || 50) * padding)
+      const zoomY = canvasSize.height / ((visibleHeight || 50) * padding)
+      const orthoZoom = Math.min(zoomX, zoomY)
+
+      const dist = maxDim * 2
+      if (viewMode === 'top') {
+        camera.position.set(center.x, center.y + dist, center.z)
+      } else if (viewMode === 'front') {
+        camera.position.set(center.x, center.y, center.z + dist)
+      } else {
+        camera.position.set(center.x + dist, center.y, center.z)
+      }
       camera.lookAt(center)
-    } else if (viewMode === 'front') {
-      camera.position.set(center.x, center.y, center.z + size * 3)
-      camera.lookAt(center)
-    } else if (viewMode === 'side') {
-      camera.position.set(center.x + size * 3, center.y, center.z)
-      camera.lookAt(center)
+      if ('zoom' in camera) {
+        ; (camera as THREE.OrthographicCamera).zoom = orthoZoom
+        camera.updateProjectionMatrix()
+      }
     }
-  }, [camera, boundingBox, viewMode, target])
+  }, [camera, boundingBox, viewMode, target, canvasSize])
 
   return null
 }
@@ -626,15 +663,15 @@ function generateId(): string {
 }
 
 function createDefaultRyb(index: number): CustomRyb {
-  const baseX = 50 + index * 30
+  // Vertically-aligned shelf-like shape
   return {
     id: generateId(),
     name: `Ryb ${index + 1}`,
     depth: 20,
     segments: [
-      { type: 'line', start: { x: 0, y: 0 }, end: { x: 0, y: 80 } },
-      { type: 'bezier', start: { x: 0, y: 80 }, end: { x: 60, y: 40 }, control1: { x: 10, y: 100 }, control2: { x: 40, y: 100 } },
-      { type: 'bezier', start: { x: 60, y: 40 }, end: { x: 0, y: 0 }, control1: { x: 80, y: 0 }, control2: { x: 20, y: -20 } },
+      { type: 'line', start: { x: 20, y: 10 }, end: { x: 20, y: 200 } },
+      { type: 'bezier', start: { x: 20, y: 200 }, end: { x: 80, y: 150 }, control1: { x: 30, y: 230 }, control2: { x: 60, y: 220 } },
+      { type: 'bezier', start: { x: 80, y: 150 }, end: { x: 20, y: 10 }, control1: { x: 100, y: 80 }, control2: { x: 50, y: 10 } },
     ]
   }
 }
@@ -693,8 +730,10 @@ function CustomRybEditor({ onSave, onClose }: CustomRybEditorProps) {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const x = (e.clientX - rect.left) * scaleX
+    const y = (e.clientY - rect.top) * scaleY
 
     const ryb = sequence.rybs[sequence.selectedIndex]
     let closestDist = 20
@@ -722,8 +761,10 @@ function CustomRybEditor({ onSave, onClose }: CustomRybEditorProps) {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const scaleX = canvas.width / rect.width
+    const scaleY = canvas.height / rect.height
+    const x = (e.clientX - rect.left) * scaleX
+    const y = (e.clientY - rect.top) * scaleY
 
     if (selectedPoint && dragging) {
       const newRybs = [...sequence.rybs]
@@ -1074,6 +1115,25 @@ function App() {
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
   const [customRybSequence, setCustomRybSequence] = useState<CustomRybSequence | null>(null)
   const [isExporting, setIsExporting] = useState(false)
+  const [cyclingRybIndex, setCyclingRybIndex] = useState(0)
+  const [cyclingFadeIn, setCyclingFadeIn] = useState(true)
+
+  // Only pass freeform points when shape is actually freeform
+  const activeFreeformPoints = params.ribShape === 'freeform' ? freeformPoints : undefined
+
+  // Cycle through ryb indices for the mini preview
+  useEffect(() => {
+    const totalRybs = params.ribCount
+    if (totalRybs <= 1) return
+    const interval = setInterval(() => {
+      setCyclingFadeIn(false)
+      setTimeout(() => {
+        setCyclingRybIndex(prev => (prev + 1) % totalRybs)
+        setCyclingFadeIn(true)
+      }, SITE_CONFIG.previewFadeDurationMs)
+    }, SITE_CONFIG.previewCycleIntervalMs)
+    return () => clearInterval(interval)
+  }, [params.ribCount])
 
   const calculations = useMemo(() => calculateSheetsNeeded(params), [
     params.length.value, params.length.unit, params.height.value, params.height.unit,
@@ -1162,14 +1222,16 @@ function App() {
             <div className="relative h-[350px]">
               <div className="absolute inset-0">
                 <Canvas shadows camera={{ position: [10, 8, 15], fov: 45 }}>
-                  <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} customRybSequence={customRybSequence} canvasId="hero-canvas" />
+                  <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="hero-canvas" />
                 </Canvas>
               </div>
-              {/* Top Right Mini Preview - Animated Single Ryb */}
+              {/* Top Right Mini Preview - Cycling Single Ryb */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-cream/90 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-charcoal/10 shadow-lg">
-                <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
-                  <Scene params={params} viewMode={'3d'} freeformPoints={freeformPoints} isSingleRib={true} canvasId="mini-canvas" />
-                </Canvas>
+                <div style={{ opacity: cyclingFadeIn ? 1 : 0, transition: `opacity ${SITE_CONFIG.previewFadeDurationMs}ms ease-in-out` }} className="w-full h-full">
+                  <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
+                    <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} isSingleRib={true} canvasId="mini-canvas" />
+                  </Canvas>
+                </div>
               </div>
             </div>
           </div>
@@ -1195,7 +1257,7 @@ function App() {
                 <div className="flex gap-6 items-start">
                   <div className="w-64 h-64 bg-stone/5 rounded-lg overflow-hidden border border-stone/10">
                     <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
-                      <Scene params={params} viewMode={ribViewMode} freeformPoints={freeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="rib-canvas" />
+                      <Scene params={params} viewMode={ribViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="rib-canvas" />
                     </Canvas>
                   </div>
                   <div className="flex-1 grid grid-cols-3 gap-4">
@@ -1281,7 +1343,7 @@ function App() {
               {/* Center - Sticky Preview */}
               <div className="lg:col-span-6">
                 <div className="sticky top-24">
-                  <div className="card h-full min-h-[450px] flex flex-col">
+                  <div className="card h-full min-h-[450px] flex flex-col" style={{ minHeight: '50vh' }}>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-display text-base text-charcoal">Full Ryb Editor</h3>
                       <div className="flex gap-1 bg-cream rounded-lg p-1">
@@ -1293,9 +1355,9 @@ function App() {
                         <button onClick={() => setShelfViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
                       </div>
                     </div>
-                    <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative">
+                    <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative" style={{ minHeight: '350px' }}>
                       <Canvas shadows camera={{ position: [10, 8, 15], fov: 45 }}>
-                        <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} customRybSequence={customRybSequence} canvasId="shelf-canvas" />
+                        <Scene params={params} viewMode={shelfViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="shelf-canvas" />
                       </Canvas>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-3">
