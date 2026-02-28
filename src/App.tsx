@@ -2,6 +2,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera, ContactShadows, Float } from '@react-three/drei'
 import * as THREE from 'three'
+import makerjs from 'makerjs'
+import { createSlotWithDogbone, createBackplaneOutline } from './backplane'
 
 type Unit = 'in' | 'mm'
 type ViewMode = '3d' | 'top' | 'front' | 'side'
@@ -42,8 +44,10 @@ interface ShelfParams {
   ribRotateZ: number
   sizeTransforms: RibSizeTransform[]
   flatEdge: boolean
-  rodDiameter: DimensionUnit
-  rodCount: number
+  backplaneEnabled: boolean
+  backplaneMaterialThickness: number
+  backplaneSlotDepth: number
+  backplaneDogboneRadius: number
   material: string
   finish: string
 }
@@ -411,28 +415,31 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   return { geometries, positions, rotations }
 }
 
-function Rods({ positions, rodDiameterMM, depthMM, rodCount = 1, flatEdge = true }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number, rodCount?: number, flatEdge?: boolean }) {
-  const rodLength = 80
+function Backplane3D({ positions, lengthMM, depthMM, materialThicknessMM, enabled }: { positions: { x: number, y: number, z: number }[], lengthMM: number, depthMM: number, materialThicknessMM: number, enabled: boolean }) {
+  if (!enabled || positions.length < 2) return null
+
+  // The backplane sits behind the rybs, flat against the wall
+  const bpWidth = lengthMM * 1.05
+  const bpHeight = depthMM * 0.8
+  const bpDepth = materialThicknessMM
+
+  // Center position
+  const centerX = (positions[0].x + positions[positions.length - 1].x) / 2
+  const centerY = (Math.min(...positions.map(p => p.y)) + Math.max(...positions.map(p => p.y))) / 2
 
   return (
     <group>
-      {positions.map((pos, ribIndex) => (
-        <group key={ribIndex}>
-          {Array.from({ length: rodCount }).map((_, rodIndex) => {
-            const spacing = rodCount > 1 ? depthMM / (rodCount + 1) : 0
-            const zOffset = rodCount > 1 ? spacing * (rodIndex + 1) : depthMM * 0.1
-            const wallOffset = flatEdge ? depthMM * 0.1 : 0
-            const zPos = -wallOffset - (rodCount > 1 ? zOffset : depthMM * 0.1)
-            return (
-              <group key={rodIndex} position={[pos.x, pos.y, zPos]}>
-                <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-                  <cylinderGeometry args={[rodDiameterMM / 2, rodDiameterMM / 2, rodLength, 12]} />
-                  <meshStandardMaterial color="#4A4744" metalness={0.8} roughness={0.2} />
-                </mesh>
-              </group>
-            )
-          })}
-        </group>
+      {/* Backplane body */}
+      <mesh position={[centerX, centerY, -depthMM * 0.6]} castShadow receiveShadow>
+        <boxGeometry args={[bpWidth, bpHeight, bpDepth]} />
+        <meshStandardMaterial color="#8B7355" roughness={0.7} metalness={0.05} />
+      </mesh>
+      {/* Slot indicators */}
+      {positions.map((pos, i) => (
+        <mesh key={i} position={[pos.x, pos.y, -depthMM * 0.6]}>
+          <boxGeometry args={[materialThicknessMM, materialThicknessMM * 3, bpDepth + 0.5]} />
+          <meshStandardMaterial color="#2C2C2C" roughness={0.5} />
+        </mesh>
       ))}
     </group>
   )
@@ -588,7 +595,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence }: { params: Shel
     return mat
   }, [selectedMaterial])
 
-  const rodDiameterMM = toMM(params.rodDiameter)
+  const lengthMM = toMM(params.length)
   const depthMM = toMM(params.ribDepth)
 
   return (
@@ -596,7 +603,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence }: { params: Shel
       {geometries.map((geometry, index) => (
         <mesh key={index} geometry={geometry} material={material} position={[positions[index].x, positions[index].y, positions[index].z]} castShadow receiveShadow />
       ))}
-      {params.rodCount > 0 && positions.length > 0 && <Rods positions={positions} rodDiameterMM={rodDiameterMM} depthMM={depthMM} rodCount={params.rodCount} flatEdge={params.flatEdge} />}
+      <Backplane3D positions={positions} lengthMM={lengthMM} depthMM={depthMM} materialThicknessMM={params.backplaneMaterialThickness} enabled={params.backplaneEnabled} />
     </group>
   )
 }
@@ -1119,8 +1126,10 @@ function App() {
     ribRotateZ: 0,
     sizeTransforms: [],
     flatEdge: true,
-    rodDiameter: { value: 0.25, unit: 'in' },
-    rodCount: 2,
+    backplaneEnabled: true,
+    backplaneMaterialThickness: 12,
+    backplaneSlotDepth: 60,
+    backplaneDogboneRadius: 6.5,
     material: 'birch-plywood',
     finish: 'raw',
   })
@@ -1211,77 +1220,115 @@ function App() {
     try {
       const widthMM = toMM(params.ribX.physical) * params.ribX.factor
       const heightMM = toMM(params.ribY.physical) * params.ribY.factor
-      const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
-      const sheetW = 1220 // A0-ish sheet width mm
+      const sheetW = 1220
       const sheetH = 2440
-      const padding = 10
-      const cols = Math.floor(sheetW / (widthMM + padding))
+      const padding = 15
 
-      // Generate profile paths for each rib
-      const profiles: string[] = []
+      // Build a makerjs model for the full cut sheet
+      const models: Record<string, makerjs.IModel> = {}
+      let modelIdx = 0
+
+      // Sheet outline
+      const sheetOutline = new makerjs.models.Rectangle(sheetW, sheetH)
+      models[`sheet_${modelIdx++}`] = sheetOutline
+
+      // Row-based packing of ryb profiles
+      let curX = padding
+      let curY = padding
+      let rowHeight = 0
+
       for (let i = 0; i < params.ribCount; i++) {
-        const col = i % cols
-        const row = Math.floor(i / cols)
-        const ox = col * (widthMM + padding) + padding
-        const oy = row * (heightMM + padding) + padding
-
         const transform = interpolateTransform(params.sizeTransforms, i / Math.max(params.ribCount - 1, 1))
         const sw = widthMM * transform.scaleX
         const sh = heightMM * transform.scaleY
 
+        // Advance to next row if needed
+        if (curX + sw + padding > sheetW) {
+          curX = padding
+          curY += rowHeight + padding
+          rowHeight = 0
+        }
+
+        let rybModel: makerjs.IModel
         if (params.ribShape === 'circle') {
-          profiles.push(`<ellipse cx="${ox + sw / 2}" cy="${oy + sh / 2}" rx="${sw / 2}" ry="${sh / 2}" fill="none" stroke="black" stroke-width="0.5"/>`)
-          profiles.push(`<text x="${ox + sw / 2}" y="${oy + sh / 2}" font-size="8" text-anchor="middle" fill="#666">${i + 1}</text>`)
+          rybModel = new makerjs.models.Ellipse(sw / 2, sh / 2)
+          makerjs.model.move(rybModel, [curX + sw / 2, curY + sh / 2])
         } else if (params.ribShape === 'freeform' && freeformPoints.length > 2) {
+          // Convert freeform points to a makerjs polygon
           const minX = Math.min(...freeformPoints.map(p => p.x))
           const maxX = Math.max(...freeformPoints.map(p => p.x))
           const minY = Math.min(...freeformPoints.map(p => p.y))
           const maxY = Math.max(...freeformPoints.map(p => p.y))
           const rangeX = maxX - minX || 1
           const rangeY = maxY - minY || 1
-          const pts = freeformPoints.map(p => `${ox + ((p.x - minX) / rangeX) * sw},${oy + ((p.y - minY) / rangeY) * sh}`).join(' ')
-          profiles.push(`<polygon points="${pts}" fill="none" stroke="black" stroke-width="0.5"/>`)
-          profiles.push(`<text x="${ox + sw / 2}" y="${oy + sh / 2}" font-size="8" text-anchor="middle" fill="#666">${i + 1}</text>`)
+          const scaledPts: [number, number][] = freeformPoints.map(p => [
+            curX + ((p.x - minX) / rangeX) * sw,
+            curY + ((p.y - minY) / rangeY) * sh,
+          ])
+          const connectPath: Record<string, makerjs.IPath> = {}
+          for (let j = 0; j < scaledPts.length; j++) {
+            const next = (j + 1) % scaledPts.length
+            connectPath[`line_${j}`] = new makerjs.paths.Line(scaledPts[j], scaledPts[next])
+          }
+          rybModel = { paths: connectPath }
         } else {
-          profiles.push(`<rect x="${ox}" y="${oy}" width="${sw}" height="${sh}" fill="none" stroke="black" stroke-width="0.5"/>`)
-          profiles.push(`<text x="${ox + sw / 2}" y="${oy + sh / 2}" font-size="8" text-anchor="middle" fill="#666">${i + 1}</text>`)
+          rybModel = new makerjs.models.Rectangle(sw, sh)
+          makerjs.model.move(rybModel, [curX, curY])
+        }
+        models[`ryb_${modelIdx++}`] = rybModel
+
+        curX += sw + padding
+        rowHeight = Math.max(rowHeight, sh)
+      }
+
+      // Backplane with dogbone slots (if enabled)
+      if (params.backplaneEnabled) {
+        curX = padding
+        curY += rowHeight + padding * 2
+
+        const lengthMM = toMM(params.length)
+        const bpWidth = Math.min(lengthMM * 1.05, sheetW - 2 * padding)
+        const bpHeight = Math.min(toMM(params.ribDepth) * 0.8, sheetH - curY - padding)
+
+        if (bpHeight > 50) {
+          // Backplane outline
+          const bpModel = createBackplaneOutline(bpWidth, bpHeight, 12)
+          makerjs.model.move(bpModel, [curX, curY])
+          models[`backplane_${modelIdx++}`] = bpModel
+
+          // Dogbone slots — evenly spaced along backplane
+          const slotW = params.backplaneMaterialThickness
+          const slotH = params.backplaneSlotDepth
+          const slotSpacing = bpWidth / (params.ribCount + 1)
+
+          for (let s = 0; s < params.ribCount; s++) {
+            const slotModel = createSlotWithDogbone(slotW, slotH)
+            const sx = curX + slotSpacing * (s + 1)
+            const sy = curY + bpHeight / 2
+            makerjs.model.move(slotModel, [sx, sy])
+            models[`slot_${modelIdx++}`] = slotModel
+          }
         }
       }
 
+      const fullModel: makerjs.IModel = { models }
+
       if (format === 'svg') {
-        const totalRows = Math.ceil(params.ribCount / cols)
-        const svgH = totalRows * (heightMM + padding) + padding
-        const svg = `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${sheetW}mm" height="${svgH}mm" viewBox="0 0 ${sheetW} ${svgH}">\n  <rect width="${sheetW}" height="${svgH}" fill="white" stroke="#ccc" stroke-width="0.5"/>\n  ${profiles.join('\n  ')}\n</svg>`
+        const svg = makerjs.exporter.toSVG(fullModel, {
+          units: makerjs.unitType.Millimeter,
+          stroke: 'black',
+          strokeWidth: '0.5px',
+          fill: 'none',
+        })
         const blob = new Blob([svg], { type: 'image/svg+xml' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url; a.download = `rybform-cutfile-${params.ribCount}rybs.svg`; a.click()
         URL.revokeObjectURL(url)
       } else {
-        // DXF generation (basic AC1009 format)
-        let dxf = '0\nSECTION\n2\nENTITIES\n'
-        for (let i = 0; i < params.ribCount; i++) {
-          const col = i % cols
-          const row = Math.floor(i / cols)
-          const ox = col * (widthMM + padding) + padding
-          const oy = row * (heightMM + padding) + padding
-          const transform = interpolateTransform(params.sizeTransforms, i / Math.max(params.ribCount - 1, 1))
-          const sw = widthMM * transform.scaleX
-          const sh = heightMM * transform.scaleY
-
-          if (params.ribShape === 'circle') {
-            dxf += `0\nELLIPSE\n8\n0\n10\n${ox + sw / 2}\n20\n${oy + sh / 2}\n30\n0\n11\n${sw / 2}\n21\n0\n31\n0\n40\n${sh / sw}\n41\n0\n42\n${Math.PI * 2}\n`
-          } else {
-            // Rectangle as LINE entities
-            const corners = [[ox, oy], [ox + sw, oy], [ox + sw, oy + sh], [ox, oy + sh]]
-            for (let j = 0; j < 4; j++) {
-              const [x1, y1] = corners[j]
-              const [x2, y2] = corners[(j + 1) % 4]
-              dxf += `0\nLINE\n8\n0\n10\n${x1}\n20\n${y1}\n30\n0\n11\n${x2}\n21\n${y2}\n31\n0\n`
-            }
-          }
-        }
-        dxf += '0\nENDSEC\n0\nEOF\n'
+        const dxf = makerjs.exporter.toDXF(fullModel, {
+          units: makerjs.unitType.Millimeter,
+        })
         const blob = new Blob([dxf], { type: 'application/dxf' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
@@ -1523,7 +1570,7 @@ function App() {
                   <div className="space-y-3">
                     <div>
                       <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Ryb Count</span><span className="text-charcoal font-medium">{params.ribCount}</span></label>
-                      <input type="range" min={3} max={30} value={params.ribCount} onChange={(e) => {
+                      <input type="range" min={3} max={200} value={params.ribCount} onChange={(e) => {
                         const newCount = Number(e.target.value)
                         handleParamChange('ribCount', newCount)
                       }} className="w-full accent-charcoal" />
@@ -1564,16 +1611,29 @@ function App() {
                 </div>
 
                 <div className="card">
-                  <h3 className="font-display text-base text-charcoal mb-4">Wall Mount</h3>
+                  <h3 className="font-display text-base text-charcoal mb-4">Backplane</h3>
                   <div className="space-y-3">
-                    <div>
-                      <label className="text-xs text-warm-gray block mb-1">Rod Diameter</label>
-                      <UnitInput label="Rod" value={params.rodDiameter} onChange={(v) => handleParamChange('rodDiameter', v)} min={0.125} max={1} />
-                    </div>
-                    <div>
-                      <label className="text-xs text-warm-gray block mb-1">Rods per Ryb</label>
-                      <input type="range" min={1} max={4} value={params.rodCount} onChange={(e) => handleParamChange('rodCount', Number(e.target.value))} className="w-full accent-terracotta" />
-                    </div>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" checked={params.backplaneEnabled} onChange={(e) => handleParamChange('backplaneEnabled', e.target.checked)} className="w-5 h-5 rounded border-stone/30 text-charcoal focus:ring-charcoal" />
+                      <span className="text-sm font-medium text-charcoal">Enable Backplane</span>
+                    </label>
+                    {params.backplaneEnabled && (
+                      <>
+                        <div>
+                          <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Material Thickness</span><span className="text-charcoal font-medium">{params.backplaneMaterialThickness}mm</span></label>
+                          <input type="range" min={3} max={25} step={0.5} value={params.backplaneMaterialThickness} onChange={(e) => handleParamChange('backplaneMaterialThickness', Number(e.target.value))} className="w-full accent-charcoal" />
+                        </div>
+                        <div>
+                          <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Slot Depth</span><span className="text-charcoal font-medium">{params.backplaneSlotDepth}mm</span></label>
+                          <input type="range" min={20} max={200} step={5} value={params.backplaneSlotDepth} onChange={(e) => handleParamChange('backplaneSlotDepth', Number(e.target.value))} className="w-full accent-charcoal" />
+                        </div>
+                        <div>
+                          <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Dogbone Radius</span><span className="text-charcoal font-medium">{params.backplaneDogboneRadius}mm</span></label>
+                          <input type="range" min={2} max={15} step={0.5} value={params.backplaneDogboneRadius} onChange={(e) => handleParamChange('backplaneDogboneRadius', Number(e.target.value))} className="w-full accent-charcoal" />
+                          <p className="text-xs text-warm-gray mt-1">CNC bit clearance fillet</p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
