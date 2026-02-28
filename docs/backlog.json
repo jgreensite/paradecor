@@ -50,6 +50,11 @@
             "id": "EPIC-07",
             "title": "Backplane & CNC Quality",
             "description": "Replace rod mounting with backplane system, implement CNC-quality DXF export with makerjs, dogbone slot fillets, and empirical accuracy testing against reference CNC files"
+        },
+        {
+            "id": "EPIC-08",
+            "title": "Ops Tooling & Internal Scripts",
+            "description": "Stop using hacky, inline node/python scripts for development tasks. Centralize all ops workflows (start/stop server, parsing test results, test running) into a robust Python CLI (e.g., `para_ops.py`) to streamline local development."
         }
     ],
     "stories": [
@@ -212,6 +217,19 @@
             "dependencies": [
                 "RYB-023"
             ]
+        },
+        {
+            "id": "RYB-026",
+            "epic": "EPIC-08",
+            "title": "Centralize ops scripts into para_ops.py",
+            "description": "Create a unified python script `scripts/para_ops.py` to handle all operational tasks (running Playwright tools, parsing DXF score metrics, running servers), replacing inline hacky scripts with robust tooling.",
+            "status": "in-progress",
+            "priority": "high",
+            "labels": [
+                "ops",
+                "tooling"
+            ],
+            "dependencies": []
         }
     ]
 }

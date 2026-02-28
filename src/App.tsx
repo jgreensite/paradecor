@@ -3,7 +3,7 @@ import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera, ContactShadows, Float } from '@react-three/drei'
 import * as THREE from 'three'
 import makerjs from 'makerjs'
-import { createSlotWithDogbone, createBackplaneOutline } from './backplane'
+import { createSlotWithDogbone, createBackplaneOutline, generateCncLayout } from './backplane'
 
 type Unit = 'in' | 'mm'
 type ViewMode = '3d' | 'top' | 'front' | 'side'
@@ -1218,100 +1218,44 @@ function App() {
   const handleExport = (format: 'svg' | 'dxf') => {
     setIsExporting(true)
     try {
+      const lengthMM = toMM(params.length)
+      const waveHeightMM = toMM(params.height)
       const widthMM = toMM(params.ribX.physical) * params.ribX.factor
       const heightMM = toMM(params.ribY.physical) * params.ribY.factor
       const sheetW = 1220
       const sheetH = 2440
-      const padding = 15
-
-      // Build a makerjs model for the full cut sheet
-      const models: Record<string, makerjs.IModel> = {}
-      let modelIdx = 0
-
-      // Sheet outline
-      const sheetOutline = new makerjs.models.Rectangle(sheetW, sheetH)
-      models[`sheet_${modelIdx++}`] = sheetOutline
-
-      // Row-based packing of ryb profiles
-      let curX = padding
-      let curY = padding
-      let rowHeight = 0
+      // Prepare ryb profiles
+      const rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[] }[] = []
+      const rybPositions: { x: number; y: number }[] = []
+      const wavePath = generateWavePath(lengthMM, waveHeightMM, params.waveHeight, params.waveFrequency, params.ribCount)
 
       for (let i = 0; i < params.ribCount; i++) {
         const transform = interpolateTransform(params.sizeTransforms, i / Math.max(params.ribCount - 1, 1))
-        const sw = widthMM * transform.scaleX
-        const sh = heightMM * transform.scaleY
-
-        // Advance to next row if needed
-        if (curX + sw + padding > sheetW) {
-          curX = padding
-          curY += rowHeight + padding
-          rowHeight = 0
-        }
-
-        let rybModel: makerjs.IModel
-        if (params.ribShape === 'circle') {
-          rybModel = new makerjs.models.Ellipse(sw / 2, sh / 2)
-          makerjs.model.move(rybModel, [curX + sw / 2, curY + sh / 2])
-        } else if (params.ribShape === 'freeform' && freeformPoints.length > 2) {
-          // Convert freeform points to a makerjs polygon
-          const minX = Math.min(...freeformPoints.map(p => p.x))
-          const maxX = Math.max(...freeformPoints.map(p => p.x))
-          const minY = Math.min(...freeformPoints.map(p => p.y))
-          const maxY = Math.max(...freeformPoints.map(p => p.y))
-          const rangeX = maxX - minX || 1
-          const rangeY = maxY - minY || 1
-          const scaledPts: [number, number][] = freeformPoints.map(p => [
-            curX + ((p.x - minX) / rangeX) * sw,
-            curY + ((p.y - minY) / rangeY) * sh,
-          ])
-          const connectPath: Record<string, makerjs.IPath> = {}
-          for (let j = 0; j < scaledPts.length; j++) {
-            const next = (j + 1) % scaledPts.length
-            connectPath[`line_${j}`] = new makerjs.paths.Line(scaledPts[j], scaledPts[next])
-          }
-          rybModel = { paths: connectPath }
-        } else {
-          rybModel = new makerjs.models.Rectangle(sw, sh)
-          makerjs.model.move(rybModel, [curX, curY])
-        }
-        models[`ryb_${modelIdx++}`] = rybModel
-
-        curX += sw + padding
-        rowHeight = Math.max(rowHeight, sh)
+        rybProfiles.push({
+          width: widthMM * transform.scaleX,
+          height: heightMM * transform.scaleY,
+          shape: params.ribShape,
+          freeformPts: params.ribShape === 'freeform' && freeformPoints.length > 2 ? freeformPoints : undefined
+        })
+        rybPositions.push({
+          x: wavePath[i].x,
+          y: wavePath[i].y,
+        })
       }
 
-      // Backplane with dogbone slots (if enabled)
-      if (params.backplaneEnabled) {
-        curX = padding
-        curY += rowHeight + padding * 2
-
-        const lengthMM = toMM(params.length)
-        const bpWidth = Math.min(lengthMM * 1.05, sheetW - 2 * padding)
-        const bpHeight = Math.min(toMM(params.ribDepth) * 0.8, sheetH - curY - padding)
-
-        if (bpHeight > 50) {
-          // Backplane outline
-          const bpModel = createBackplaneOutline(bpWidth, bpHeight, 12)
-          makerjs.model.move(bpModel, [curX, curY])
-          models[`backplane_${modelIdx++}`] = bpModel
-
-          // Dogbone slots — evenly spaced along backplane
-          const slotW = params.backplaneMaterialThickness
-          const slotH = params.backplaneSlotDepth
-          const slotSpacing = bpWidth / (params.ribCount + 1)
-
-          for (let s = 0; s < params.ribCount; s++) {
-            const slotModel = createSlotWithDogbone(slotW, slotH)
-            const sx = curX + slotSpacing * (s + 1)
-            const sy = curY + bpHeight / 2
-            makerjs.model.move(slotModel, [sx, sy])
-            models[`slot_${modelIdx++}`] = slotModel
-          }
-        }
-      }
-
-      const fullModel: makerjs.IModel = { models }
+      // Generate the DXF/SVG model via the unified CNC layout builder
+      const fullModel = generateCncLayout(
+        rybProfiles,
+        {
+          enabled: params.backplaneEnabled,
+          materialThickness: params.backplaneMaterialThickness,
+          slotDepth: params.backplaneSlotDepth,
+          dogboneRadius: params.backplaneDogboneRadius,
+          autoSlots: true,
+          manualSlotPositions: []
+        },
+        rybPositions
+      )
 
       if (format === 'svg') {
         const svg = makerjs.exporter.toSVG(fullModel, {
@@ -1328,6 +1272,7 @@ function App() {
       } else {
         const dxf = makerjs.exporter.toDXF(fullModel, {
           units: makerjs.unitType.Millimeter,
+          usePOLYLINE: true,
         })
         const blob = new Blob([dxf], { type: 'application/dxf' })
         const url = URL.createObjectURL(blob)
