@@ -6,8 +6,12 @@ import makerjs from 'makerjs'
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+export type BackplaneShape = 'rectangular' | 'organic'
+
 export interface BackplaneParams {
     enabled: boolean
+    shape: BackplaneShape
+    organicOffset: number
     materialThickness: number   // mm — slot width matches this
     slotDepth: number           // mm — how deep ryb slots into backplane
     dogboneRadius: number       // mm — radius of semicircular fillet at slot ends (typically materialThickness/2)
@@ -25,6 +29,8 @@ export interface SlotDef {
 
 export const DEFAULT_BACKPLANE: BackplaneParams = {
     enabled: true,
+    shape: 'rectangular',
+    organicOffset: 0,
     materialThickness: 12,
     slotDepth: 60,
     dogboneRadius: 6.5,   // slightly > materialThickness/2 for CNC bit clearance
@@ -140,6 +146,30 @@ export function createBackplaneOutline(
 }
 
 /**
+ * Generate an organic backplane outline that follows the wave path smoothly.
+ */
+export function createOrganicBackplaneOutline(
+    rybPositions: { x: number; y: number }[],
+    maxRybHeight: number,
+    organicOffset: number
+): makerjs.IModel {
+    const points: number[][] = []
+
+    // Top curve
+    for (let i = 0; i < rybPositions.length; i++) {
+        const p = rybPositions[i]
+        points.push([p.x, p.y + maxRybHeight / 2 + organicOffset])
+    }
+    // Bottom curve
+    for (let i = rybPositions.length - 1; i >= 0; i--) {
+        const p = rybPositions[i]
+        points.push([p.x, p.y - maxRybHeight / 2 - organicOffset])
+    }
+
+    return new makerjs.models.ConnectTheDots(true, points)
+}
+
+/**
  * Very simple stroke font for numbers 0-9
  */
 function createTextModel(text: string, scale: number = 1): makerjs.IModel {
@@ -233,6 +263,10 @@ export function generateCncLayout(
 
         // Create the ryb shape
         let rybModel: makerjs.IModel
+        const hasTab = backplaneParams.enabled
+        const tw = backplaneParams.materialThickness
+        const th = backplaneParams.slotDepth
+
         if (profile.shape === 'circle') {
             rybModel = new makerjs.models.Ellipse(w / 2, h / 2)
             makerjs.model.move(rybModel, [w / 2, h / 2])
@@ -251,21 +285,37 @@ export function generateCncLayout(
             }
             rybModel = { paths }
         } else {
-            rybModel = new makerjs.models.ConnectTheDots(true, [
-                [0, 0], [w, 0], [w, h], [0, h]
-            ])
+            if (hasTab) {
+                const ty1 = h / 2 - th / 2
+                const ty2 = h / 2 + th / 2
+                rybModel = new makerjs.models.ConnectTheDots(true, [
+                    [0, 0], [w, 0], [w, h], [0, h],
+                    [0, ty2], [-tw, ty2], [-tw, ty1], [0, ty1]
+                ])
+            } else {
+                rybModel = new makerjs.models.ConnectTheDots(true, [
+                    [0, 0], [w, 0], [w, h], [0, h]
+                ])
+            }
         }
 
-        // Add numerical label to ryb (so it's hidden near the backplane slot)
-        const label = createTextModel((i + 1).toString(), 4)
-        makerjs.model.move(label, [w / 2 - 4, 10]) // placed near the bottom edge
-        const rybGroup = { models: { outline: rybModel, label } }
+        if (hasTab && (profile.shape === 'circle' || profile.shape === 'freeform')) {
+            const tab = new makerjs.models.Rectangle(tw + 1, th) // +1 for overlap to ensure clean union
+            makerjs.model.move(tab, [-tw, h / 2 - th / 2])
+            makerjs.model.combineUnion(rybModel, tab)
+            rybModel = { models: { base: rybModel, tab } }
+        }
 
-        // Position it
-        makerjs.model.move(rybGroup, [curX, curY])
+        const rybGroup = { models: { outline: rybModel } }
+
+        // Measure true bounds (including tab and freeform offsets) to pack accurately
+        const bbox = makerjs.measure.modelExtents(rybGroup)
+
+        // Position it such that the bottom-left of the bounding box is at [curX, curY]
+        makerjs.model.moveRelative(rybGroup, [curX - (bbox?.low?.[0] ?? 0), curY - (bbox?.low?.[1] ?? 0)])
         models[`ryb_${modelIdx++}`] = rybGroup
 
-        curX += w + PADDING
+        curX += ((bbox?.high?.[0] ?? w) - (bbox?.low?.[0] ?? 0)) + PADDING
         rowHeight = Math.max(rowHeight, h)
     }
 
@@ -282,49 +332,79 @@ export function generateCncLayout(
         const waveWidth = waveMaxX - waveMinX
         const waveAmp = waveMaxY - waveMinY
 
-        // Backplane needs to be large enough to cover the wave amplitude + padding
-        // Min height increased to 500 to ensure area > 500,000 for empirical match
-        const bpWidth = Math.min(waveWidth + 40, SHEET_W - 2 * PADDING)
-        const bpHeight = Math.min(Math.max(waveAmp + 300, 500), SHEET_H - curY - PADDING * 2)
+        let bpGroup: makerjs.IModel
+        let bpHeightTotal: number
 
-        // Advance row
-        curX = PADDING
-        curY += rowHeight + PADDING * 2
-
-        if (curY + bpHeight + PADDING > sheetCount * (SHEET_H + 50)) {
-            addSheet()
-            curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
-        }
-
-        const bpOutline = createBackplaneOutline(bpWidth, bpHeight, 12)
-        const bpGroupModels: Record<string, makerjs.IModel> = { outline: bpOutline }
-
-        let slotIdx = 0
         const slotW = backplaneParams.materialThickness
         const slotH = backplaneParams.slotDepth
 
-        for (let i = 0; i < rybPositions.length; i++) {
-            const pos = rybPositions[i]
-            const slotModel = createSlotWithDogbone(slotW, slotH)
+        if (backplaneParams.shape === 'organic') {
+            const maxRybHeight = Math.max(...rybProfiles.map(p => p.height))
+            bpHeightTotal = maxRybHeight + (backplaneParams.organicOffset * 2)
 
-            // Map the slot's wave position into the backplane rectangle
-            const sx = 20 + ((pos.x - waveMinX) / (waveWidth || 1)) * (bpWidth - 40)
-            const sy = (bpHeight / 2) + (pos.y - ((waveMaxY + waveMinY) / 2))
+            curX = PADDING
+            curY += rowHeight + PADDING * 2
 
-            makerjs.model.move(slotModel, [sx, sy])
-            bpGroupModels[`slot_${slotIdx}`] = slotModel
+            if (curY + bpHeightTotal + PADDING > sheetCount * (SHEET_H + 50)) {
+                addSheet()
+                curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
+            }
 
-            // Number the slot just below it
-            const slotLabel = createTextModel((i + 1).toString(), 3)
-            makerjs.model.move(slotLabel, [sx - 3, sy - slotH / 2 - 12])
-            bpGroupModels[`slot_label_${slotIdx}`] = slotLabel
+            const bpOutline = createOrganicBackplaneOutline(rybPositions, maxRybHeight, backplaneParams.organicOffset)
+            const bpGroupModels: Record<string, makerjs.IModel> = { outline: bpOutline }
 
-            slotIdx++
+            let slotIdx = 0
+            for (let i = 0; i < rybPositions.length; i++) {
+                const pos = rybPositions[i]
+                const slotModel = createSlotWithDogbone(slotW, slotH)
+                makerjs.model.move(slotModel, [pos.x, pos.y])
+                bpGroupModels[`slot_${slotIdx}`] = slotModel
+                slotIdx++
+            }
+
+            bpGroup = { models: bpGroupModels }
+            // Move so the minimum X/Y maps to the current sheet padding position
+            const offsetX = PADDING - waveMinX + (maxRybHeight / 2) + backplaneParams.organicOffset
+            const offsetY = curY - waveMinY + (maxRybHeight / 2) + backplaneParams.organicOffset
+            makerjs.model.move(bpGroup, [offsetX, offsetY])
+
+        } else {
+            // Rectangular fallback
+            const bpWidth = Math.min(waveWidth + 40, SHEET_W - 2 * PADDING)
+            const bpHeight = Math.min(Math.max(waveAmp + 300, 500), SHEET_H - curY - PADDING * 2)
+            bpHeightTotal = bpHeight
+
+            curX = PADDING
+            curY += rowHeight + PADDING * 2
+
+            if (curY + bpHeightTotal + PADDING > sheetCount * (SHEET_H + 50)) {
+                addSheet()
+                curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
+            }
+
+            const bpOutline = createBackplaneOutline(bpWidth, bpHeightTotal, 12)
+            const bpGroupModels: Record<string, makerjs.IModel> = { outline: bpOutline }
+
+            let slotIdx = 0
+            for (let i = 0; i < rybPositions.length; i++) {
+                const pos = rybPositions[i]
+                const slotModel = createSlotWithDogbone(slotW, slotH)
+
+                // Map the slot's wave position into the backplane rectangle
+                const sx = 20 + ((pos.x - waveMinX) / (waveWidth || 1)) * (bpWidth - 40)
+                const sy = (bpHeightTotal / 2) + (pos.y - ((waveMaxY + waveMinY) / 2))
+
+                makerjs.model.move(slotModel, [sx, sy])
+                bpGroupModels[`slot_${slotIdx}`] = slotModel
+                slotIdx++
+            }
+
+            bpGroup = { models: bpGroupModels }
+            makerjs.model.move(bpGroup, [curX, curY])
         }
 
-        const bpGroup = { models: bpGroupModels }
-        makerjs.model.move(bpGroup, [curX, curY])
-        models[`backplane_${modelIdx++}`] = bpGroup
+        models[`backplane`] = bpGroup
+        curY += bpHeightTotal + PADDING
     }
 
     return { models }

@@ -51,7 +51,7 @@ test.describe('DXF Export Accuracy', () => {
 
     test('DXF contains backplane with dogbone slots', async ({ page }) => {
         // Ensure backplane is enabled
-        const bpCheckbox = page.locator('input[type="checkbox"]').first()
+        const bpCheckbox = page.locator('label:has-text("Enable Backplane") >> input[type="checkbox"]')
         if (!(await bpCheckbox.isChecked())) {
             await bpCheckbox.click()
         }
@@ -88,18 +88,29 @@ test.describe('DXF Export Accuracy', () => {
     })
 
     test('DXF accuracy score >= 80%', async ({ page }) => {
-        // Configure to match reference: high ryb count, backplane enabled
+        test.setTimeout(90000) // Heavy DXF generation takes longer
+
+        // Configure to match reference: high ryb count, backplane enabled, 105 inches long
+        // Set shelf dimensions
+        const lenInput = page.locator('label').filter({ hasText: 'Length' }).locator('..').locator('input').first()
+        await lenInput.fill('105')
+
+        const heightInput = page.locator('label').filter({ hasText: 'Wave Height' }).locator('..').locator('input').first()
+        await heightInput.fill('12')
+
         // Set ryb count to 100 (close to the ~100 in reference)
-        const rybCountSlider = page.locator('label:has-text("Ryb Count") + input[type="range"]')
-        if (await rybCountSlider.isVisible()) {
-            await rybCountSlider.fill('100')
-        }
+        const rybCountSlider = page.locator('label').filter({ hasText: 'Ryb Count' }).locator('..').locator('input[type="range"]')
+        await rybCountSlider.fill('100')
 
         // Ensure backplane enabled
-        const bpCheckbox = page.locator('input[type="checkbox"]').first()
+        const bpCheckbox = page.locator('label:has-text("Enable Backplane") >> input[type="checkbox"]')
         if (!(await bpCheckbox.isChecked())) {
             await bpCheckbox.click()
         }
+
+        // Set to organic shape
+        const shapeSelect = page.locator('h3:has-text("Backplane")').locator('..').locator('select')
+        await shapeSelect.selectOption('organic')
 
         // Export DXF
         const exportBtn = page.getByRole('button', { name: 'Export & Order' })
@@ -131,7 +142,7 @@ test.describe('DXF Export Accuracy', () => {
         console.log(JSON.stringify(metrics, null, 2))
 
         // The overall score target
-        expect(metrics.overall_score).toBeGreaterThanOrEqual(80) // Iterate to > 80% as required
+        expect(metrics.overall_score).toBeGreaterThanOrEqual(90) // Target is 90%+ now that organic shape and tabs are added
         expect(metrics.ryb_count_generated).toBeGreaterThanOrEqual(10)
         expect(metrics.slot_count_generated).toBeGreaterThanOrEqual(10)
     })
@@ -148,7 +159,7 @@ test.describe('Backplane UI', () => {
         const card = page.locator('h3:has-text("Backplane")')
         await expect(card).toBeVisible()
 
-        const checkbox = page.locator('input[type="checkbox"]').first()
+        const checkbox = page.locator('label:has-text("Enable Backplane") >> input[type="checkbox"]')
         await expect(checkbox).toBeVisible()
         await expect(checkbox).toBeChecked() // default enabled
     })
@@ -165,7 +176,7 @@ test.describe('Backplane UI', () => {
     })
 
     test('disabling backplane hides controls', async ({ page }) => {
-        const checkbox = page.locator('input[type="checkbox"]').first()
+        const checkbox = page.locator('label:has-text("Enable Backplane") >> input[type="checkbox"]')
         await checkbox.uncheck()
         await page.waitForTimeout(300)
 
