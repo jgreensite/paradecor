@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Python venv
+.venv/
+
+# Test output
+test-output/
+
+# Analysis artifacts
+examples/dxf_analysis.json
