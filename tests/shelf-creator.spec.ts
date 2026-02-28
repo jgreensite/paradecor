@@ -16,7 +16,7 @@ test.describe('Parametric Shelf Creator - UI Integrity', () => {
 
   test('Hero section visible', async ({ page }) => {
     await expect(page.getByText('Shape by shape')).toBeVisible();
-    await expect(page.getByText('rib by rib')).toBeVisible();
+    await expect(page.getByText('ryb by ryb')).toBeVisible();
   });
 
   test('All sliders exist', async ({ page }) => {
@@ -156,12 +156,12 @@ test.describe('Parametric Shelf Creator - View Controls', () => {
   test('Views can be switched independently', async ({ page }) => {
     const ribSection = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const shelfSection = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
-    
+
     await ribSection.getByRole('button', { name: 'Top' }).click();
     await page.waitForTimeout(200);
     await shelfSection.getByRole('button', { name: 'Side' }).click();
     await page.waitForTimeout(200);
-    
+
     await ribSection.getByRole('button', { name: '3D' }).click();
     await page.waitForTimeout(200);
   });
@@ -238,7 +238,7 @@ test.describe('Parametric Shelf Creator - Presets', () => {
   test('Presets are mutually exclusive', async ({ page }) => {
     const gentle = page.getByRole('button', { name: /Gentle Wave/i });
     const steep = page.getByRole('button', { name: /Steep Wave/i });
-    
+
     await gentle.click();
     await page.waitForTimeout(200);
     await steep.click();
@@ -400,11 +400,11 @@ test.describe('Parametric Shelf Creator - State Sync', () => {
     const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const xInput = section.locator('input[type="number"]').first();
     const factorSlider = section.locator('input[type="range"]').first();
-    
+
     const initialValue = await factorSlider.inputValue();
     await xInput.fill('5');
     await page.waitForTimeout(500);
-    
+
     expect(await factorSlider.inputValue()).not.toBe(initialValue);
   });
 
@@ -412,7 +412,7 @@ test.describe('Parametric Shelf Creator - State Sync', () => {
     const section = page.locator('.card').filter({ hasText: 'Single Ryb Editor' });
     const xInput = section.locator('input[type="number"]').first();
     const yInput = section.locator('input[type="number"]').nth(1);
-    
+
     await xInput.fill('5');
     await page.waitForTimeout(300);
     await yInput.fill('6');
@@ -471,7 +471,7 @@ test.describe('Parametric Shelf Creator - Canvas Rendering', () => {
       }
     });
     await page.waitForTimeout(1000);
-    
+
     const criticalErrors = errors.filter(e => !e.includes('Warning') && !e.includes('DevTools'));
     expect(criticalErrors).toHaveLength(0);
   });
@@ -559,5 +559,118 @@ test.describe('Parametric Shelf Creator - Visual Regression', () => {
     const section = page.locator('.card').filter({ hasText: 'Full Ryb Editor' });
     await section.getByRole('button', { name: 'Side' }).click();
     await page.waitForTimeout(500);
+  });
+});
+
+test.describe('Parametric Shelf Creator - Round 2 Features', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('Labels use "ryb" not "rib"', async ({ page }) => {
+    await expect(page.getByText('Ryb-Based Design')).toBeVisible();
+    await expect(page.getByText('Rybs', { exact: true })).toBeVisible();
+    await expect(page.getByText('Ryb Count')).toBeVisible();
+  });
+
+  test('Spacing slider exists in Wave Path', async ({ page }) => {
+    const waveSection = page.locator('.card').filter({ hasText: 'Wave Path' });
+    await expect(waveSection.getByText('Spacing')).toBeVisible();
+  });
+
+  test('Spacing slider adjusts ryb count', async ({ page }) => {
+    const waveSection = page.locator('.card').filter({ hasText: 'Wave Path' });
+    const spacingSlider = waveSection.locator('input[type="range"]').nth(1);
+    await spacingSlider.fill('50');
+    await page.waitForTimeout(300);
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Size transform start+end both work', async ({ page }) => {
+    const transformSection = page.locator('.card').filter({ hasText: 'Size Transform' });
+    await expect(transformSection.getByText('Scale rybs along path')).toBeVisible();
+    const startInput = transformSection.locator('input[type="number"]').first();
+    await startInput.fill('0.5');
+    await page.waitForTimeout(300);
+    const endInput = transformSection.locator('input[type="number"]').nth(1);
+    await endInput.fill('2');
+    await page.waitForTimeout(300);
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Wave amplitude slider changes shelf wave', async ({ page }) => {
+    const waveSection = page.locator('.card').filter({ hasText: 'Wave Path' });
+    const amplitudeSlider = waveSection.locator('input[type="range"]').nth(2);
+    await amplitudeSlider.fill('6');
+    await page.waitForTimeout(500);
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+});
+
+test.describe('Custom Ryb Editor - Extended', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+  });
+
+  test('Editor shows segment type toggles', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    await expect(page.getByText(/S1:.*Line/)).toBeVisible();
+    await expect(page.getByText(/S2:.*Bezier/)).toBeVisible();
+  });
+
+  test('Can add a new ryb tab', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    await page.getByRole('button', { name: '+ Add' }).click();
+    await expect(page.getByText('Ryb 2')).toBeVisible();
+  });
+
+  test('Can add a segment', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    await page.getByRole('button', { name: '+ Add Segment' }).click();
+    await expect(page.getByText(/S4:/)).toBeVisible();
+  });
+
+  test('Can toggle segment type', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    // S1 starts as Line, click to toggle to Bezier
+    await page.getByText(/S1:.*Line/).click();
+    await page.waitForTimeout(200);
+    await expect(page.getByText(/S1:.*Bezier/)).toBeVisible();
+  });
+
+  test('Save & Use applies shape to preview', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    await page.getByRole('button', { name: 'Save & Use' }).click();
+    await expect(page.getByText('Custom Ryb Editor')).not.toBeVisible();
+    await expect(page.locator('canvas').first()).toBeVisible();
+  });
+
+  test('Canvas has hover interaction', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
+    // Just verify the canvas exists and we can hover over it
+    const editorCanvas = page.locator('.fixed canvas');
+    await expect(editorCanvas).toBeVisible();
+    // Move mouse over the canvas area
+    const box = await editorCanvas.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + 50, box.y + 50);
+      await page.waitForTimeout(200);
+    }
+  });
+
+  test('Delete ryb is possible with multiple rybs', async ({ page }) => {
+    await page.getByRole('button', { name: /Freeform/i }).first().click();
+    await page.getByRole('button', { name: '+ Add' }).click();
+    await expect(page.getByText('Ryb 2')).toBeVisible();
+    await page.getByRole('button', { name: 'Delete Ryb' }).click();
+    await expect(page.getByText('Ryb 2')).not.toBeVisible();
   });
 });

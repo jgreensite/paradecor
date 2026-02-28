@@ -150,25 +150,25 @@ function updateAxisDimensionFromFactor(dim: AxisDimension, newFactor: number): A
 
 function generateWavePath(lengthMM: number, heightMM: number, waveHeight: number, waveFrequency: number, ribCount: number): { x: number, y: number }[] {
   const points: { x: number, y: number }[] = []
-  
+
   for (let i = 0; i <= ribCount; i++) {
     const t = i / ribCount
     const xPos = t * lengthMM - lengthMM / 2
-    const waveY = Math.sin(t * Math.PI * 2 * waveFrequency) * waveHeight * 10
+    const waveY = Math.sin(t * Math.PI * 2 * waveFrequency) * waveHeight * 25
     points.push({ x: xPos, y: waveY })
   }
-  
+
   return points
 }
 
 function interpolateTransform(transforms: RibSizeTransform[], position: number): { scaleX: number, scaleY: number, rotation: number } {
   if (transforms.length === 0) return { scaleX: 1, scaleY: 1, rotation: 0 }
-  
+
   const sorted = [...transforms].sort((a, b) => a.position - b.position)
-  
+
   if (position <= sorted[0].position) return { scaleX: sorted[0].scaleX, scaleY: sorted[0].scaleY, rotation: sorted[0].rotation }
   if (position >= sorted[sorted.length - 1].position) return { scaleX: sorted[sorted.length - 1].scaleX, scaleY: sorted[sorted.length - 1].scaleY, rotation: sorted[sorted.length - 1].rotation }
-  
+
   for (let i = 0; i < sorted.length - 1; i++) {
     if (position >= sorted[i].position && position <= sorted[i + 1].position) {
       const t = (position - sorted[i].position) / (sorted[i + 1].position - sorted[i].position)
@@ -179,13 +179,13 @@ function interpolateTransform(transforms: RibSizeTransform[], position: number):
       }
     }
   }
-  
+
   return { scaleX: 1, scaleY: 1, rotation: 0 }
 }
 
 function generateRibGeometry(
-  shape: RibShape, 
-  widthMM: number, 
+  shape: RibShape,
+  widthMM: number,
   heightMM: number,
   depthMM: number,
   rotX: number,
@@ -198,15 +198,15 @@ function generateRibGeometry(
   const vertices: number[] = []
   const indices: number[] = []
   const normals: number[] = []
-  
+
   const thickness = flatEdge ? 0 : depthMM / 2
-  
+
   if (shape === 'square' || shape === 'rectangle') {
     const w = widthMM / 2
     const h = heightMM / 2
     const zF = flatEdge ? depthMM : depthMM / 2
     const zB = flatEdge ? 0 : -depthMM / 2
-    
+
     const frontFace = [[-w, -h, zF], [w, -h, zF], [w, h, zF], [-w, h, zF]]
     const backFace = [[-w, -h, zB], [-w, h, zB], [w, h, zB], [w, -h, zB]]
     const faces = [
@@ -216,7 +216,7 @@ function generateRibGeometry(
       [[w, -h, zF], [w, -h, zB], [w, h, zB], [w, h, zF]],
       [[-w, -h, zB], [-w, -h, zF], [-w, h, zF], [-w, h, zB]],
     ]
-    
+
     faces.forEach(face => {
       const baseIdx = vertices.length / 3
       face.forEach(v => vertices.push(...v))
@@ -229,14 +229,14 @@ function generateRibGeometry(
       for (let i = 0; i < 4; i++) normals.push(normal.x, normal.y, normal.z)
       indices.push(baseIdx, baseIdx + 1, baseIdx + 2, baseIdx, baseIdx + 2, baseIdx + 3)
     })
-    
+
   } else if (shape === 'circle') {
     const radiusX = widthMM / 2
     const radiusY = heightMM / 2
     const segments = 24
     const zF = flatEdge ? depthMM : depthMM / 2
     const zB = flatEdge ? 0 : -depthMM / 2
-    
+
     const frontCenter = vertices.length / 3
     vertices.push(0, 0, zF)
     normals.push(0, 0, 1)
@@ -246,7 +246,7 @@ function generateRibGeometry(
       normals.push(0, 0, 1)
     }
     for (let i = 0; i < segments; i++) indices.push(frontCenter, frontCenter + i + 1, frontCenter + i + 2)
-    
+
     const backCenter = vertices.length / 3
     vertices.push(0, 0, zB)
     normals.push(0, 0, -1)
@@ -256,7 +256,7 @@ function generateRibGeometry(
       normals.push(0, 0, -1)
     }
     for (let i = 0; i < segments; i++) indices.push(backCenter, backCenter + i + 2, backCenter + i + 1)
-    
+
     const sideStart = vertices.length / 3
     for (let i = 0; i <= segments; i++) {
       const angle = (i / segments) * Math.PI * 2
@@ -271,7 +271,7 @@ function generateRibGeometry(
       const a = sideStart + i * 2
       indices.push(a, a + 1, a + 3, a, a + 3, a + 2)
     }
-    
+
   } else if (shape === 'freeform' && freeformPoints && freeformPoints.length > 2) {
     const minX = Math.min(...freeformPoints.map(p => p.x))
     const maxX = Math.max(...freeformPoints.map(p => p.x))
@@ -279,27 +279,27 @@ function generateRibGeometry(
     const maxY = Math.max(...freeformPoints.map(p => p.y))
     const rangeX = maxX - minX || 1
     const rangeY = maxY - minY || 1
-    
+
     const scaledPoints = freeformPoints.map(p => ({
       x: ((p.x - minX) / rangeX - 0.5) * widthMM,
       y: ((p.y - minY) / rangeY - 0.5) * heightMM,
     }))
-    
+
     const zF = flatEdge ? depthMM : depthMM / 2
     const zB = flatEdge ? 0 : -depthMM / 2
-    
+
     const frontCenter = vertices.length / 3
     vertices.push(0, 0, zF)
     normals.push(0, 0, 1)
     scaledPoints.forEach(p => { vertices.push(p.x, p.y, zF); normals.push(0, 0, 1) })
     for (let i = 0; i < scaledPoints.length; i++) indices.push(frontCenter, frontCenter + i + 1, frontCenter + ((i + 1) % scaledPoints.length) + 1)
-    
+
     const backCenter = vertices.length / 3
     vertices.push(0, 0, zB)
     normals.push(0, 0, -1)
     scaledPoints.forEach(p => { vertices.push(p.x, p.y, zB); normals.push(0, 0, -1) })
     for (let i = 0; i < scaledPoints.length; i++) indices.push(backCenter, backCenter + ((i + 1) % scaledPoints.length) + 1, backCenter + i + 1)
-    
+
     const sideStart = vertices.length / 3
     for (let i = 0; i < scaledPoints.length; i++) {
       const curr = scaledPoints[i]
@@ -309,71 +309,98 @@ function generateRibGeometry(
       const len = Math.sqrt(dx * dx + dy * dy) || 1
       const nx = -dy / len
       const ny = dx / len
-      
+
       vertices.push(curr.x, curr.y, zF, curr.x, curr.y, zB, next.x, next.y, zB, next.x, next.y, zF)
       normals.push(nx, ny, 0, nx, ny, 0, nx, ny, 0, nx, ny, 0)
       const base = sideStart + i * 4
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
     }
   }
-  
+
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
-  
+
   const euler = new THREE.Euler(THREE.MathUtils.degToRad(rotX), THREE.MathUtils.degToRad(rotY), THREE.MathUtils.degToRad(rotZ))
   geometry.rotateX(euler.x)
   geometry.rotateY(euler.y)
   geometry.rotateZ(euler.z)
-  
+
   return geometry
 }
 
-function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[]): { geometries: THREE.BufferGeometry[], positions: { x: number, y: number, z: number }[], rotations: number[] } {
+function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null): { geometries: THREE.BufferGeometry[], positions: { x: number, y: number, z: number }[], rotations: number[] } {
   const lengthMM = toMM(params.length)
   const waveHeightMM = toMM(params.height)
   const depthMM = toMM(params.ribDepth)
-  
+
   const baseX = toMM(params.ribX.physical) * params.ribX.factor
   const baseY = toMM(params.ribY.physical) * params.ribY.factor
   const baseZ = toMM(params.ribZ.physical) * params.ribZ.factor
-  
+
   const wavePath = generateWavePath(lengthMM, waveHeightMM, params.waveHeight, params.waveFrequency, params.ribCount)
-  
+
   const geometries: THREE.BufferGeometry[] = []
   const positions: { x: number, y: number, z: number }[] = []
   const rotations: number[] = []
-  
-  const activeTransforms = params.sizeTransforms.length > 0 
-    ? params.sizeTransforms 
+
+  const activeTransforms = params.sizeTransforms.length > 0
+    ? params.sizeTransforms
     : [{ position: 0, scaleX: 1, scaleY: 1, rotation: 0 }, { position: 1, scaleX: 1, scaleY: 1, rotation: 0 }]
-  
+
   for (let i = 0; i < wavePath.length; i++) {
     const point = wavePath[i]
     const t = i / (wavePath.length - 1 || 1)
     const transform = interpolateTransform(activeTransforms, t)
-    
+
     const scaledWidth = baseX * transform.scaleX
     const scaledHeight = baseY * transform.scaleY
     const scaledDepth = baseZ
-    
+
+    // Multi-ryb: interpolate freeform points from the sequence
+    let ribFreeformPoints = freeformPoints
+    if (customRybSequence && customRybSequence.rybs.length > 1 && params.ribShape === 'freeform') {
+      const rybCount = customRybSequence.rybs.length
+      // Map rib position (t) to ryb index, interpolating between adjacent rybs
+      const rybT = t * (rybCount - 1)
+      const rybIdx0 = Math.min(Math.floor(rybT), rybCount - 1)
+      const rybIdx1 = Math.min(rybIdx0 + 1, rybCount - 1)
+      const localT = rybT - rybIdx0
+
+      const points0 = getAllPointsFromRyb(customRybSequence.rybs[rybIdx0])
+      const points1 = getAllPointsFromRyb(customRybSequence.rybs[rybIdx1])
+
+      // Interpolate between the two sets of points
+      const maxLen = Math.max(points0.length, points1.length)
+      const interpolatedPoints: FreeformRibPoint[] = []
+      for (let j = 0; j < maxLen; j++) {
+        const p0 = points0[Math.min(j, points0.length - 1)]
+        const p1 = points1[Math.min(j, points1.length - 1)]
+        interpolatedPoints.push({
+          x: (p0.x + (p1.x - p0.x) * localT) * 2,
+          y: (p0.y + (p1.y - p0.y) * localT) * 2
+        })
+      }
+      ribFreeformPoints = interpolatedPoints
+    }
+
     const geometry = generateRibGeometry(
       params.ribShape, scaledWidth, scaledHeight, scaledDepth,
       params.ribRotateX + transform.rotation, params.ribRotateY, params.ribRotateZ,
-      params.flatEdge, freeformPoints
+      params.flatEdge, ribFreeformPoints
     )
     geometries.push(geometry)
     positions.push({ x: point.x, y: point.y, z: 0 })
     rotations.push(0)
   }
-  
+
   return { geometries, positions, rotations }
 }
 
 function Rods({ positions, rodDiameterMM, depthMM, rodCount = 1, flatEdge = true }: { positions: { x: number, y: number, z: number }[], rodDiameterMM: number, depthMM: number, rodCount?: number, flatEdge?: boolean }) {
   const rodLength = 80
-  
+
   return (
     <group>
       {positions.map((pos, ribIndex) => (
@@ -402,7 +429,7 @@ function calculateRibBoundingBox(params: ShelfParams, freeformPoints?: FreeformR
   const widthMM = toMM(params.ribX.physical) * params.ribX.factor
   const heightMM = toMM(params.ribY.physical) * params.ribY.factor
   const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
-  
+
   if (params.ribShape === 'freeform' && freeformPoints && freeformPoints.length > 2) {
     const minX = Math.min(...freeformPoints.map(p => p.x))
     const maxX = Math.max(...freeformPoints.map(p => p.x))
@@ -414,7 +441,7 @@ function calculateRibBoundingBox(params: ShelfParams, freeformPoints?: FreeformR
       depth: depthMM
     }
   }
-  
+
   return { width: widthMM, height: heightMM, depth: depthMM }
 }
 
@@ -422,10 +449,10 @@ function calculateShelfBoundingBox(params: ShelfParams): { width: number, height
   const lengthMM = toMM(params.length)
   const waveHeightMM = toMM(params.height)
   const ribDepthMM = toMM(params.ribDepth)
-  
+
   const waveAmplitude = params.waveHeight * 10
   const totalHeight = waveHeightMM + waveAmplitude
-  
+
   return {
     width: lengthMM,
     height: totalHeight,
@@ -436,13 +463,13 @@ function calculateShelfBoundingBox(params: ShelfParams): { width: number, height
 
 function ZoomToFit({ boundingBox, viewMode, target }: { boundingBox: { width: number, height: number, depth: number, center?: THREE.Vector3 }, viewMode: ViewMode, target?: THREE.Vector3 }) {
   const { camera } = useThree()
-  
+
   useEffect(() => {
     const center = target || boundingBox.center || new THREE.Vector3(0, 0, 0)
     const size = Math.max(boundingBox.width, boundingBox.height, boundingBox.depth) || 50
-    
+
     const fov = (camera as THREE.PerspectiveCamera).fov || 50
-    
+
     if (viewMode === '3d') {
       const distance = size * 2.5
       camera.position.set(center.x + distance * 0.5, center.y + distance * 0.5, center.z + distance)
@@ -458,7 +485,7 @@ function ZoomToFit({ boundingBox, viewMode, target }: { boundingBox: { width: nu
       camera.lookAt(center)
     }
   }, [camera, boundingBox, viewMode, target])
-  
+
   return null
 }
 
@@ -466,49 +493,49 @@ function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, fre
   const widthMM = toMM(params.ribX.physical) * params.ribX.factor
   const heightMM = toMM(params.ribY.physical) * params.ribY.factor
   const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
-  
-  const geometry = useMemo(() => 
-    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints), 
+
+  const geometry = useMemo(() =>
+    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints),
     [params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints]
   )
-  
+
   const material = useMemo(() => {
     const mat = MATERIALS.find(m => m.id === params.material) || MATERIALS[0]
     return new THREE.MeshStandardMaterial({ color: mat.color, roughness: mat.roughness, metalness: 0.05, side: THREE.DoubleSide })
   }, [params.material])
-  
+
   return <mesh geometry={geometry} material={material} castShadow receiveShadow />
 }
 
-function ShelfMesh({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
+function ShelfMesh({ params, freeformPoints, customRybSequence }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null }) {
   const groupRef = useRef<THREE.Group>(null)
   const materialRef = useRef<THREE.MeshStandardMaterial | null>(null)
-  
+
   const selectedMaterial = MATERIALS.find(m => m.id === params.material) || MATERIALS[0]
-  
-  const memoKey = useMemo(() => 
-    `${params.length.value}-${params.length.unit}-${params.height.value}-${params.height.unit}-${params.ribDepth.value}-${params.ribCount}-${params.waveHeight}-${params.waveFrequency}-${params.ribShape}-${params.ribX.physical.value}-${params.ribX.factor}-${params.ribY.physical.value}-${params.ribY.factor}-${params.ribZ.physical.value}-${params.ribZ.factor}-${params.ribRotateX}-${params.ribRotateY}-${params.ribRotateZ}-${params.flatEdge}`,
-    [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge]
+
+  const memoKey = useMemo(() =>
+    `${params.length.value}-${params.length.unit}-${params.height.value}-${params.height.unit}-${params.ribDepth.value}-${params.ribCount}-${params.waveHeight}-${params.waveFrequency}-${params.ribShape}-${params.ribX.physical.value}-${params.ribX.factor}-${params.ribY.physical.value}-${params.ribY.factor}-${params.ribZ.physical.value}-${params.ribZ.factor}-${params.ribRotateX}-${params.ribRotateY}-${params.ribRotateZ}-${params.flatEdge}-${params.sizeTransforms.map(t => `${t.scaleX}-${t.scaleY}`).join(',')}`,
+    [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, params.sizeTransforms]
   )
-  
-  const { geometries, positions, rotations } = useMemo(() => generateAllRibs(params, freeformPoints), [memoKey, freeformPoints])
-  
+
+  const { geometries, positions, rotations } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
+
   useEffect(() => {
     return () => {
       geometries.forEach(geometry => geometry.dispose())
       if (materialRef.current) materialRef.current.dispose()
     }
   }, [geometries])
-  
+
   const material = useMemo(() => {
     const mat = new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide })
     materialRef.current = mat
     return mat
   }, [selectedMaterial])
-  
+
   const rodDiameterMM = toMM(params.rodDiameter)
   const depthMM = toMM(params.ribDepth)
-  
+
   return (
     <group ref={groupRef}>
       {geometries.map((geometry, index) => (
@@ -519,33 +546,33 @@ function ShelfMesh({ params, freeformPoints }: { params: ShelfParams, freeformPo
   )
 }
 
-function Scene({ params, viewMode, freeformPoints, isSingleRib = false, canvasId }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], isSingleRib?: boolean, canvasId?: string }) {
+function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRib = false, canvasId }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null, isSingleRib?: boolean, canvasId?: string }) {
   const lengthMM = toMM(params.length)
   const heightMM = toMM(params.height)
   const cameraDistance = Math.max(lengthMM, heightMM) * 1.5
-  
-  const boundingBox = useMemo(() => 
-    isSingleRib 
+
+  const boundingBox = useMemo(() =>
+    isSingleRib
       ? { ...calculateRibBoundingBox(params, freeformPoints), center: new THREE.Vector3(0, 0, 0) }
       : calculateShelfBoundingBox(params),
     [params, freeformPoints, isSingleRib]
   )
-  
+
   return (
     <>
       <ambientLight intensity={0.5} />
       <directionalLight position={[20, 30, 20]} intensity={1} castShadow />
       <directionalLight position={[-10, 10, -10]} intensity={0.3} />
       <pointLight position={[0, 0, 30]} intensity={0.5} />
-      
+
       <Float speed={isSingleRib ? 2 : 1} rotationIntensity={viewMode === '3d' && !isSingleRib ? 0.1 : 0} floatIntensity={0.3}>
-        {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} />}
+        {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} />}
       </Float>
-      
+
       <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} />
-      
+
       <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
-      
+
       {viewMode === '3d' && <OrbitControls enablePan={false} enableDamping dampingFactor={0.05} minDistance={20} maxDistance={200} makeDefault />}
       {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 100, 0]} zoom={10} near={1} far={500} onUpdate={c => c.lookAt(0, 0, 0)} />}
       {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 100]} zoom={10} near={1} far={500} onUpdate={c => c.lookAt(0, 0, 0)} />}
@@ -559,14 +586,14 @@ function calculateSheetsNeeded(params: ShelfParams): { sheets: number, efficienc
   const widthMM = toMM(params.ribX.physical) * params.ribX.factor
   const heightMM = toMM(params.ribY.physical) * params.ribY.factor
   const thicknessMM = toMM(params.materialThickness)
-  
+
   const ribArea = widthMM * heightMM * thicknessMM
   const totalArea = ribArea * params.ribCount
   const sheetArea = 48 * 96 * MM_PER_INCH * MM_PER_INCH
-  
+
   const sheets = Math.ceil(totalArea / sheetArea)
   const efficiency = Math.min(95, Math.round((totalArea / (sheets * sheetArea)) * 100))
-  
+
   return { sheets, efficiency }
 }
 
@@ -614,24 +641,24 @@ function createDefaultRyb(index: number): CustomRyb {
 
 function getCurvePoints(segment: CurveSegment, resolution: number = 20): BezierControlPoint[] {
   const points: BezierControlPoint[] = []
-  
+
   if (segment.type === 'line') {
     points.push(segment.start, segment.end)
   } else if (segment.type === 'bezier' && segment.control1 && segment.control2) {
     for (let i = 0; i <= resolution; i++) {
       const t = i / resolution
-      const x = Math.pow(1-t, 3) * segment.start.x + 
-                3 * Math.pow(1-t, 2) * t * segment.control1.x + 
-                3 * (1-t) * Math.pow(t, 2) * segment.control2.x + 
-                Math.pow(t, 3) * segment.end.x
-      const y = Math.pow(1-t, 3) * segment.start.y + 
-                3 * Math.pow(1-t, 2) * t * segment.control1.y + 
-                3 * (1-t) * Math.pow(t, 2) * segment.control2.y + 
-                Math.pow(t, 3) * segment.end.y
+      const x = Math.pow(1 - t, 3) * segment.start.x +
+        3 * Math.pow(1 - t, 2) * t * segment.control1.x +
+        3 * (1 - t) * Math.pow(t, 2) * segment.control2.x +
+        Math.pow(t, 3) * segment.end.x
+      const y = Math.pow(1 - t, 3) * segment.start.y +
+        3 * Math.pow(1 - t, 2) * t * segment.control1.y +
+        3 * (1 - t) * Math.pow(t, 2) * segment.control2.y +
+        Math.pow(t, 3) * segment.end.y
       points.push({ x, y })
     }
   }
-  
+
   return points
 }
 
@@ -643,7 +670,12 @@ function getAllPointsFromRyb(ryb: CustomRyb): BezierControlPoint[] {
   return allPoints
 }
 
-function CustomRybEditor({ onClose }: { onClose: () => void }) {
+interface CustomRybEditorProps {
+  onSave: (points: FreeformRibPoint[], sequence: CustomRybSequence) => void
+  onClose: () => void
+}
+
+function CustomRybEditor({ onSave, onClose }: CustomRybEditorProps) {
   const [sequence, setSequence] = useState<CustomRybSequence>({
     rybs: [createDefaultRyb(0)],
     spacingType: 'even',
@@ -651,22 +683,23 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
     selectedIndex: 0
   })
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [selectedPoint, setSelectedPoint] = useState<{rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2'} | null>(null)
+  const [selectedPoint, setSelectedPoint] = useState<{ rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2' } | null>(null)
+  const [hoveredPoint, setHoveredPoint] = useState<{ segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2' } | null>(null)
   const [dragging, setDragging] = useState(false)
 
   const currentRyb = sequence.rybs[sequence.selectedIndex]
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    
+
     const ryb = sequence.rybs[sequence.selectedIndex]
     let closestDist = 20
-    let closest: {rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2'} | null = null
-    
+    let closest: { rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2' } | null = null
+
     ryb.segments.forEach((seg, segIdx) => {
       const checkPoint = (pt: BezierControlPoint, type: 'start' | 'end' | 'control1' | 'control2') => {
         const dist = Math.sqrt(Math.pow(pt.x - x, 2) + Math.pow(pt.y - y, 2))
@@ -680,30 +713,51 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
       if (seg.control1) checkPoint(seg.control1, 'control1')
       if (seg.control2) checkPoint(seg.control2, 'control2')
     })
-    
+
     setSelectedPoint(closest)
+    if (closest) setDragging(true)
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!selectedPoint || !dragging) return
     const canvas = canvasRef.current
     if (!canvas) return
     const rect = canvas.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
-    
-    const newRybs = [...sequence.rybs]
-    const ryb = { ...newRybs[selectedPoint.rybIndex] }
-    const segment = { ...ryb.segments[selectedPoint.segmentIndex] }
-    
-    if (selectedPoint.pointType === 'start') segment.start = { x, y }
-    else if (selectedPoint.pointType === 'end') segment.end = { x, y }
-    else if (selectedPoint.pointType === 'control1' && segment.control1) segment.control1 = { x, y }
-    else if (selectedPoint.pointType === 'control2' && segment.control2) segment.control2 = { x, y }
-    
-    ryb.segments[selectedPoint.segmentIndex] = segment
-    newRybs[selectedPoint.rybIndex] = ryb
-    setSequence(prev => ({ ...prev, rybs: newRybs }))
+
+    if (selectedPoint && dragging) {
+      const newRybs = [...sequence.rybs]
+      const ryb = { ...newRybs[selectedPoint.rybIndex] }
+      const segment = { ...ryb.segments[selectedPoint.segmentIndex] }
+
+      if (selectedPoint.pointType === 'start') segment.start = { x, y }
+      else if (selectedPoint.pointType === 'end') segment.end = { x, y }
+      else if (selectedPoint.pointType === 'control1' && segment.control1) segment.control1 = { x, y }
+      else if (selectedPoint.pointType === 'control2' && segment.control2) segment.control2 = { x, y }
+
+      ryb.segments[selectedPoint.segmentIndex] = segment
+      newRybs[selectedPoint.rybIndex] = ryb
+      setSequence(prev => ({ ...prev, rybs: newRybs }))
+    } else {
+      // Hover detection
+      const ryb = sequence.rybs[sequence.selectedIndex]
+      let closestDist = 20
+      let closest: { segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2' } | null = null
+      ryb.segments.forEach((seg, segIdx) => {
+        const checkPt = (pt: BezierControlPoint, type: 'start' | 'end' | 'control1' | 'control2') => {
+          const dist = Math.sqrt(Math.pow(pt.x - x, 2) + Math.pow(pt.y - y, 2))
+          if (dist < closestDist) {
+            closestDist = dist
+            closest = { segmentIndex: segIdx, pointType: type }
+          }
+        }
+        checkPt(seg.start, 'start')
+        checkPt(seg.end, 'end')
+        if (seg.control1) checkPt(seg.control1, 'control1')
+        if (seg.control2) checkPt(seg.control2, 'control2')
+      })
+      setHoveredPoint(closest)
+    }
   }
 
   const addRyb = () => {
@@ -738,23 +792,59 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
     setSequence(prev => ({ ...prev, rybs: newRybs }))
   }
 
+  const toggleSegmentType = (segIdx: number) => {
+    const newRybs = [...sequence.rybs]
+    const ryb = { ...newRybs[sequence.selectedIndex] }
+    const seg = { ...ryb.segments[segIdx] }
+    if (seg.type === 'line') {
+      seg.type = 'bezier'
+      const midX = (seg.start.x + seg.end.x) / 2
+      const midY = (seg.start.y + seg.end.y) / 2
+      seg.control1 = { x: midX - 20, y: midY - 20 }
+      seg.control2 = { x: midX + 20, y: midY + 20 }
+    } else {
+      seg.type = 'line'
+      delete seg.control1
+      delete seg.control2
+    }
+    ryb.segments[segIdx] = seg
+    newRybs[sequence.selectedIndex] = ryb
+    setSequence(prev => ({ ...prev, rybs: newRybs }))
+  }
+
+  const renameRyb = (index: number, name: string) => {
+    const newRybs = [...sequence.rybs]
+    newRybs[index] = { ...newRybs[index], name }
+    setSequence(prev => ({ ...prev, rybs: newRybs }))
+  }
+
+  const deleteSegment = (segIdx: number) => {
+    const newRybs = [...sequence.rybs]
+    const ryb = { ...newRybs[sequence.selectedIndex] }
+    if (ryb.segments.length <= 1) return
+    ryb.segments = ryb.segments.filter((_, i) => i !== segIdx)
+    newRybs[sequence.selectedIndex] = ryb
+    setSequence(prev => ({ ...prev, rybs: newRybs }))
+    setSelectedPoint(null)
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    
+
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    
+
     ctx.fillStyle = '#C67B5C'
     ctx.fillRect(0, 0, 4, canvas.height)
     ctx.font = '12px DM Sans'
     ctx.fillStyle = '#C67B5C'
     ctx.fillText('← Wall', 10, 20)
-    
+
     const ryb = sequence.rybs[sequence.selectedIndex]
     const allPoints = getAllPointsFromRyb(ryb)
-    
+
     if (allPoints.length > 0) {
       ctx.strokeStyle = '#2C2A26'
       ctx.lineWidth = 2
@@ -766,12 +856,26 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
       ctx.fillStyle = 'rgba(44, 42, 38, 0.1)'
       ctx.fill()
     }
-    
+
     ryb.segments.forEach((seg, segIdx) => {
-      const drawPoint = (pt: BezierControlPoint, type: string, isSelected: boolean) => {
+      const drawPoint = (pt: BezierControlPoint, type: string, isSelected: boolean, pointType: string) => {
+        const isHovered = hoveredPoint?.segmentIndex === segIdx && hoveredPoint?.pointType === pointType
+        const radius = isSelected ? 8 : (isHovered ? 8 : 6)
+
+        // Hover glow ring
+        if (isHovered && !isSelected) {
+          ctx.beginPath()
+          ctx.arc(pt.x, pt.y, 12, 0, Math.PI * 2)
+          ctx.fillStyle = 'rgba(198, 123, 92, 0.2)'
+          ctx.fill()
+          ctx.strokeStyle = '#C67B5C'
+          ctx.lineWidth = 1.5
+          ctx.stroke()
+        }
+
         ctx.beginPath()
-        ctx.arc(pt.x, pt.y, isSelected ? 8 : 6, 0, Math.PI * 2)
-        ctx.fillStyle = isSelected ? '#C67B5C' : (type === 'control' ? '#8B5A3C' : '#2C2A26')
+        ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2)
+        ctx.fillStyle = isSelected ? '#C67B5C' : (isHovered ? '#D4896E' : (type === 'control' ? '#8B5A3C' : '#2C2A26'))
         ctx.fill()
         if (isSelected) {
           ctx.strokeStyle = '#fff'
@@ -779,7 +883,7 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
           ctx.stroke()
         }
       }
-      
+
       if (seg.control1) {
         ctx.strokeStyle = '#8B5A3C'
         ctx.lineWidth = 1
@@ -789,9 +893,9 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
         ctx.lineTo(seg.control1.x, seg.control1.y)
         ctx.stroke()
         ctx.setLineDash([])
-        drawPoint(seg.control1, 'control', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'control1')
+        drawPoint(seg.control1, 'control', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'control1', 'control1')
       }
-      
+
       if (seg.control2) {
         ctx.strokeStyle = '#8B5A3C'
         ctx.lineWidth = 1
@@ -801,13 +905,13 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
         ctx.lineTo(seg.control2.x, seg.control2.y)
         ctx.stroke()
         ctx.setLineDash([])
-        drawPoint(seg.control2, 'control', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'control2')
+        drawPoint(seg.control2, 'control', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'control2', 'control2')
       }
-      
-      drawPoint(seg.start, 'endpoint', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'start')
-      drawPoint(seg.end, 'endpoint', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'end')
+
+      drawPoint(seg.start, 'endpoint', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'start', 'start')
+      drawPoint(seg.end, 'endpoint', selectedPoint?.segmentIndex === segIdx && selectedPoint?.pointType === 'end', 'end')
     })
-  }, [sequence, selectedPoint])
+  }, [sequence, selectedPoint, hoveredPoint])
 
   const convertToFreeformPoints = (): FreeformRibPoint[] => {
     const ryb = sequence.rybs[sequence.selectedIndex]
@@ -822,44 +926,66 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
           <h3 className="font-display text-xl text-charcoal">Custom Ryb Editor</h3>
           <button onClick={onClose} className="text-stone hover:text-charcoal">✕</button>
         </div>
-        
+
         <p className="text-warm-gray text-sm mb-4">Edit bezier curves and lines. Click points to select and drag to move. The flat back edge is on the left.</p>
-        
-        <div className="flex gap-2 mb-4">
+
+        <div className="flex gap-2 mb-4 flex-wrap">
           {sequence.rybs.map((ryb, idx) => (
             <button
               key={ryb.id}
               onClick={() => setSequence(prev => ({ ...prev, selectedIndex: idx }))}
+              onDoubleClick={() => {
+                const name = prompt('Rename ryb:', ryb.name)
+                if (name) renameRyb(idx, name)
+              }}
               className={`px-3 py-1.5 text-sm rounded-lg transition-all ${sequence.selectedIndex === idx ? 'bg-charcoal text-cream' : 'bg-stone/10 text-charcoal hover:bg-stone/20'}`}
+              title="Double-click to rename"
             >
               {ryb.name}
             </button>
           ))}
           <button onClick={addRyb} className="px-3 py-1.5 text-sm rounded-lg bg-oak/20 text-charcoal hover:bg-oak/30">+ Add</button>
         </div>
-        
-        <div className="flex gap-2 mb-4">
+
+        <div className="flex gap-2 mb-4 flex-wrap">
           <button onClick={addSegment} className="px-3 py-1.5 text-sm rounded-lg bg-stone/10 text-charcoal hover:bg-stone/20">+ Add Segment</button>
           {sequence.rybs.length > 1 && (
             <button onClick={() => deleteRyb(sequence.selectedIndex)} className="px-3 py-1.5 text-sm rounded-lg bg-red-100 text-red-700 hover:bg-red-200">Delete Ryb</button>
           )}
         </div>
-        
-        <canvas 
-          ref={canvasRef} 
-          width={500} 
-          height={300} 
+
+        <div className="flex gap-1 mb-3 flex-wrap">
+          {currentRyb.segments.map((seg, segIdx) => (
+            <div key={segIdx} className="flex items-center gap-1">
+              <button
+                onClick={() => toggleSegmentType(segIdx)}
+                className={`px-2 py-1 text-xs rounded transition-all ${seg.type === 'bezier' ? 'bg-oak/30 text-charcoal' : 'bg-stone/10 text-charcoal hover:bg-stone/20'}`}
+                title={`Segment ${segIdx + 1}: Click to toggle line/bezier`}
+              >
+                S{segIdx + 1}: {seg.type === 'bezier' ? '◠ Bezier' : '— Line'}
+              </button>
+              {currentRyb.segments.length > 1 && (
+                <button onClick={() => deleteSegment(segIdx)} className="px-1 py-1 text-xs text-red-500 hover:text-red-700" title="Delete segment">✕</button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <canvas
+          ref={canvasRef}
+          width={500}
+          height={300}
           className="w-full border border-stone/20 rounded-lg bg-white cursor-crosshair"
-          onClick={handleCanvasClick}
+          onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseUp={() => setDragging(false)}
-          onMouseLeave={() => setDragging(false)}
+          onMouseUp={() => { setDragging(false) }}
+          onMouseLeave={() => { setDragging(false) }}
         />
-        
+
         <div className="grid grid-cols-3 gap-4 mt-4">
           <div>
             <label className="text-xs text-warm-gray block mb-1">Spacing</label>
-            <select 
+            <select
               value={sequence.spacingType}
               onChange={(e) => setSequence(prev => ({ ...prev, spacingType: e.target.value as 'even' | 'custom' }))}
               className="w-full px-3 py-2 text-sm bg-white border border-stone/20 rounded-lg"
@@ -870,7 +996,7 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="text-xs text-warm-gray block mb-1">Interpolation</label>
-            <select 
+            <select
               value={sequence.interpolation}
               onChange={(e) => setSequence(prev => ({ ...prev, interpolation: e.target.value as CustomRybSequence['interpolation'] }))}
               className="w-full px-3 py-2 text-sm bg-white border border-stone/20 rounded-lg"
@@ -883,8 +1009,8 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="text-xs text-warm-gray block mb-1">Ryb Count</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               min={1}
               max={30}
               value={sequence.rybs.length}
@@ -899,12 +1025,12 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
             />
           </div>
         </div>
-        
+
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="px-4 py-2 text-sm text-stone hover:text-charcoal">Cancel</button>
           <button onClick={() => {
             const points = convertToFreeformPoints()
-            onClose()
+            onSave(points, sequence)
           }} className="flex-1 px-4 py-2 bg-charcoal text-cream rounded-lg hover:bg-stone">Save & Use</button>
         </div>
       </div>
@@ -912,72 +1038,7 @@ function CustomRybEditor({ onClose }: { onClose: () => void }) {
   )
 }
 
-function FreeformDrawer({ onSave, onClose }: { onSave: (points: FreeformRibPoint[]) => void, onClose: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [points, setPoints] = useState<FreeformRibPoint[]>([])
-  const [isDrawing, setIsDrawing] = useState(false)
-  
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    setPoints([{ x: e.clientX - rect.left, y: e.clientY - rect.top }])
-    setIsDrawing(true)
-  }
-  
-  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    setPoints(prev => [...prev, { x: e.clientX - rect.left, y: e.clientY - rect.top }])
-  }
-  
-  const stopDrawing = () => setIsDrawing(false)
-  
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#C67B5C'
-    ctx.fillRect(0, 0, 4, canvas.height)
-    ctx.font = '12px Arial'
-    ctx.fillStyle = '#C67B5C'
-    ctx.fillText('← Wall (Flat Back)', 10, 20)
-    
-    if (points.length > 1) {
-      ctx.strokeStyle = '#2C2A26'
-      ctx.lineWidth = 2
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.beginPath()
-      ctx.moveTo(points[0].x, points[0].y)
-      points.forEach(p => ctx.lineTo(p.x, p.y))
-      ctx.closePath()
-      ctx.stroke()
-      ctx.fillStyle = 'rgba(44, 42, 38, 0.1)'
-      ctx.fill()
-    }
-  }, [points])
-  
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/50">
-      <div className="bg-cream rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl">
-        <h3 className="font-display text-xl text-charcoal mb-4">Draw Freeform Rib (Side View)</h3>
-        <p className="text-warm-gray text-sm mb-2">Draw your custom rib shape in profile view. The flat back edge (where it mounts to wall) is on the left.</p>
-        <canvas ref={canvasRef} width={400} height={250} className="w-full border border-stone/20 rounded-lg bg-white cursor-crosshair" onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseLeave={stopDrawing} />
-        <div className="flex gap-3 mt-4">
-          <button onClick={() => setPoints([])} className="px-4 py-2 text-sm text-stone hover:text-charcoal">Clear</button>
-          <button onClick={onClose} className="px-4 py-2 text-sm text-stone hover:text-charcoal">Cancel</button>
-          <button onClick={() => onSave(points)} disabled={points.length < 3} className="flex-1 px-4 py-2 bg-charcoal text-cream rounded-lg hover:bg-stone disabled:opacity-50">Save Shape</button>
-        </div>
-      </div>
-    </div>
-  )
-}
+// FreeformDrawer removed — replaced by CustomRybEditor above
 
 function App() {
   const [params, setParams] = useState<ShelfParams>({
@@ -993,8 +1054,8 @@ function App() {
     ribX: createAxisDimension(3, 'in'),
     ribY: createAxisDimension(3, 'in'),
     ribZ: createAxisDimension(1, 'in'),
-    ribRotateX: 0,
-    ribRotateY: 0,
+    ribRotateX: 180,
+    ribRotateY: -90,
     ribRotateZ: 0,
     sizeTransforms: [],
     flatEdge: true,
@@ -1003,7 +1064,7 @@ function App() {
     material: 'birch-plywood',
     finish: 'raw',
   })
-  
+
   const [activeSection, setActiveSection] = useState('design')
   const [activePreset, setActivePreset] = useState('gentle')
   const [ribViewMode, setRibViewMode] = useState<ViewMode>('3d')
@@ -1011,48 +1072,49 @@ function App() {
   const [showExport, setShowExport] = useState(false)
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
+  const [customRybSequence, setCustomRybSequence] = useState<CustomRybSequence | null>(null)
   const [isExporting, setIsExporting] = useState(false)
-  
+
   const calculations = useMemo(() => calculateSheetsNeeded(params), [
     params.length.value, params.length.unit, params.height.value, params.height.unit,
     params.materialThickness.value, params.materialThickness.unit, params.ribCount,
     params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor
   ])
-  
+
   const selectedMaterial = useMemo(() => MATERIALS.find(m => m.id === params.material) || MATERIALS[0], [params.material])
   const selectedFinish = useMemo(() => FINISHES.find(f => f.id === params.finish) || FINISHES[0], [params.finish])
   const basePrice = useMemo(() => selectedMaterial.price * calculations.sheets, [selectedMaterial.price, calculations.sheets])
   const finishPrice = useMemo(() => selectedFinish.price * params.ribCount, [selectedFinish.price, params.ribCount])
   const totalPrice = useMemo(() => basePrice + finishPrice + 35, [basePrice, finishPrice])
-  
+
   const handleParamChange = (key: keyof ShelfParams, value: any) => {
     setParams(prev => ({ ...prev, [key]: value }))
   }
-  
+
   const handleRibXPhysicalChange = useCallback((physical: DimensionUnit) => {
     setParams(prev => ({ ...prev, ribX: updateAxisDimensionFromPhysical(prev.ribX, physical) }))
   }, [])
-  
+
   const handleRibXFactorChange = useCallback((factor: number) => {
     setParams(prev => ({ ...prev, ribX: updateAxisDimensionFromFactor(prev.ribX, factor) }))
   }, [])
-  
+
   const handleRibYPhysicalChange = useCallback((physical: DimensionUnit) => {
     setParams(prev => ({ ...prev, ribY: updateAxisDimensionFromPhysical(prev.ribY, physical) }))
   }, [])
-  
+
   const handleRibYFactorChange = useCallback((factor: number) => {
     setParams(prev => ({ ...prev, ribY: updateAxisDimensionFromFactor(prev.ribY, factor) }))
   }, [])
-  
+
   const handleRibZPhysicalChange = useCallback((physical: DimensionUnit) => {
     setParams(prev => ({ ...prev, ribZ: updateAxisDimensionFromPhysical(prev.ribZ, physical) }))
   }, [])
-  
+
   const handleRibZFactorChange = useCallback((factor: number) => {
     setParams(prev => ({ ...prev, ribZ: updateAxisDimensionFromFactor(prev.ribZ, factor) }))
   }, [])
-  
+
   const handlePresetClick = (presetId: string) => {
     const preset = PRESETS.find(p => p.id === presetId)
     if (preset) {
@@ -1062,12 +1124,12 @@ function App() {
       handleParamChange('ribCount', preset.params.ribCount)
     }
   }
-  
+
   const handleExport = (format: 'svg' | 'dxf') => {
     setIsExporting(true)
     setTimeout(() => { setIsExporting(false); setShowExport(false) }, 500)
   }
-  
+
   return (
     <div className="min-h-screen grain">
       {/* Navigation */}
@@ -1090,9 +1152,9 @@ function App() {
         <section className="relative min-h-[50vh] flex items-center bg-gradient-to-b from-cream to-ivory overflow-hidden">
           <div className="max-w-7xl mx-auto px-6 py-12 grid lg:grid-cols-2 gap-12 items-center">
             <div>
-              <p className="text-terracotta text-sm tracking-[0.2em] uppercase mb-4">Rib-Based Design</p>
+              <p className="text-terracotta text-sm tracking-[0.2em] uppercase mb-4">Ryb-Based Design</p>
               <h1 className="font-display text-4xl md:text-5xl text-charcoal leading-[1.1] mb-6">
-                Shape by shape,<span className="block italic text-oak">rib by rib</span>
+                Shape by shape,<span className="block italic text-oak">ryb by ryb</span>
               </h1>
               <p className="text-stone mb-8">Design parametric shelves with primitive shapes. Rotate in 3D, scale along path.</p>
               <button onClick={() => document.getElementById('designer')?.scrollIntoView({ behavior: 'smooth' })} className="btn-primary">Start Designing</button>
@@ -1100,17 +1162,13 @@ function App() {
             <div className="relative h-[350px]">
               <div className="absolute inset-0">
                 <Canvas shadows camera={{ position: [10, 8, 15], fov: 45 }}>
-                  <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="hero-canvas" />
+                  <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} customRybSequence={customRybSequence} canvasId="hero-canvas" />
                 </Canvas>
               </div>
-              {/* Top Right Mini Preview - Animated Single Rib */}
+              {/* Top Right Mini Preview - Animated Single Ryb */}
               <div className="absolute top-0 right-0 w-32 h-32 bg-cream/90 backdrop-blur-sm rounded-lg overflow-hidden border-2 border-charcoal/10 shadow-lg">
-                <Canvas shadows camera={{ position: [12, 10, 18], fov: 40 }}>
-                  <ambientLight intensity={0.6} />
-                  <directionalLight position={[5, 5, 5]} intensity={0.8} />
-                  <Float speed={1.5} rotationIntensity={0.2} floatIntensity={0.3}>
-                    <SingleRibPreview params={params} freeformPoints={freeformPoints} />
-                  </Float>
+                <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
+                  <Scene params={params} viewMode={'3d'} freeformPoints={freeformPoints} isSingleRib={true} canvasId="mini-canvas" />
                 </Canvas>
               </div>
             </div>
@@ -1137,7 +1195,7 @@ function App() {
                 <div className="flex gap-6 items-start">
                   <div className="w-64 h-64 bg-stone/5 rounded-lg overflow-hidden border border-stone/10">
                     <Canvas shadows camera={{ position: [15, 12, 20], fov: 40 }}>
-                      <Scene params={params} viewMode={ribViewMode} freeformPoints={freeformPoints} isSingleRib={true} canvasId="rib-canvas" />
+                      <Scene params={params} viewMode={ribViewMode} freeformPoints={freeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="rib-canvas" />
                     </Canvas>
                   </div>
                   <div className="flex-1 grid grid-cols-3 gap-4">
@@ -1165,7 +1223,7 @@ function App() {
                 </div>
               </div>
             </div>
-            
+
             <div className="grid lg:grid-cols-12 gap-6">
               {/* Left */}
               <div className="lg:col-span-3 space-y-4">
@@ -1182,7 +1240,7 @@ function App() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="card">
                   <h3 className="font-display text-base text-charcoal mb-4">Ryb Shape</h3>
                   <div className="grid grid-cols-2 gap-2">
@@ -1203,7 +1261,7 @@ function App() {
                     </label>
                   </div>
                 </div>
-                
+
                 <div className="card">
                   <h3 className="font-display text-base text-charcoal mb-4">Material</h3>
                   <div className="space-y-2">
@@ -1219,7 +1277,7 @@ function App() {
                   </div>
                 </div>
               </div>
-              
+
               {/* Center - Sticky Preview */}
               <div className="lg:col-span-6">
                 <div className="sticky top-24">
@@ -1237,7 +1295,7 @@ function App() {
                     </div>
                     <div className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative">
                       <Canvas shadows camera={{ position: [10, 8, 15], fov: 45 }}>
-                        <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} canvasId="shelf-canvas" />
+                        <Scene params={params} viewMode={shelfViewMode} freeformPoints={freeformPoints} customRybSequence={customRybSequence} canvasId="shelf-canvas" />
                       </Canvas>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-3">
@@ -1251,18 +1309,18 @@ function App() {
                       </div>
                       <div className="bg-charcoal text-cream p-3 text-center rounded-lg">
                         <p className="text-xl font-display">{params.ribCount}</p>
-                        <p className="text-xs text-cream/60">Ribs</p>
+                        <p className="text-xs text-cream/60">Rybs</p>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
-              
+
               {/* Right */}
               <div className="lg:col-span-3 space-y-4">
                 <div className="card">
                   <h3 className="font-display text-base text-charcoal mb-4">Wave Path</h3>
-                  
+
                   {/* Presets moved here */}
                   <div className="flex flex-wrap gap-2 mb-4">
                     {PRESETS.map((preset) => (
@@ -1272,11 +1330,23 @@ function App() {
                       </button>
                     ))}
                   </div>
-                  
+
                   <div className="space-y-3">
                     <div>
-                      <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Rib Count</span><span className="text-charcoal font-medium">{params.ribCount}</span></label>
-                      <input type="range" min={3} max={30} value={params.ribCount} onChange={(e) => handleParamChange('ribCount', Number(e.target.value))} className="w-full accent-charcoal" />
+                      <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Ryb Count</span><span className="text-charcoal font-medium">{params.ribCount}</span></label>
+                      <input type="range" min={3} max={30} value={params.ribCount} onChange={(e) => {
+                        const newCount = Number(e.target.value)
+                        handleParamChange('ribCount', newCount)
+                      }} className="w-full accent-charcoal" />
+                    </div>
+                    <div>
+                      <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Spacing</span><span className="text-charcoal font-medium">{params.ribCount > 1 ? (toMM(params.length) / (params.ribCount - 1)).toFixed(0) : '—'}mm</span></label>
+                      <input type="range" min={10} max={200} step={5} value={params.ribCount > 1 ? Math.round(toMM(params.length) / (params.ribCount - 1)) : 100} onChange={(e) => {
+                        const spacing = Number(e.target.value)
+                        const lengthMM = toMM(params.length)
+                        const newCount = Math.max(3, Math.min(30, Math.round(lengthMM / spacing) + 1))
+                        handleParamChange('ribCount', newCount)
+                      }} className="w-full accent-charcoal" />
                     </div>
                     <div>
                       <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Wave Amplitude</span><span className="text-charcoal font-medium">{params.waveHeight}"</span></label>
@@ -1288,22 +1358,22 @@ function App() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="card">
                   <h3 className="font-display text-base text-charcoal mb-4">Size Transform</h3>
-                  <p className="text-xs text-warm-gray mb-3">Scale ribs along path</p>
+                  <p className="text-xs text-warm-gray mb-3">Scale rybs along path</p>
                   <div className="space-y-2">
                     <div className="flex gap-2 items-center">
                       <span className="text-xs w-12">Start</span>
-                      <input type="number" min={0.1} max={3} step={0.1} value={params.sizeTransforms[0]?.scaleX || 1} onChange={(e) => { const newTransforms = [...params.sizeTransforms]; if (!newTransforms[0]) newTransforms[0] = { position: 0, scaleX: 1, scaleY: 1, rotation: 0 }; newTransforms[0].scaleX = Number(e.target.value); newTransforms[0].scaleY = Number(e.target.value); handleParamChange('sizeTransforms', newTransforms) }} className="w-16 px-2 py-1 text-sm" />
+                      <input type="number" min={0.1} max={3} step={0.1} value={params.sizeTransforms[0]?.scaleX || 1} onChange={(e) => { const val = Number(e.target.value); const newTransforms = [...params.sizeTransforms]; if (!newTransforms[0]) newTransforms[0] = { position: 0, scaleX: 1, scaleY: 1, rotation: 0 }; if (!newTransforms[1]) newTransforms[1] = { position: 1, scaleX: 1, scaleY: 1, rotation: 0 }; newTransforms[0].scaleX = val; newTransforms[0].scaleY = val; handleParamChange('sizeTransforms', newTransforms) }} className="w-16 px-2 py-1 text-sm" />
                     </div>
                     <div className="flex gap-2 items-center">
                       <span className="text-xs w-12">End</span>
-                      <input type="number" min={0.1} max={3} step={0.1} value={params.sizeTransforms[1]?.scaleX || 1} onChange={(e) => { const newTransforms = [...params.sizeTransforms]; if (!newTransforms[1]) newTransforms[1] = { position: 1, scaleX: 1, scaleY: 1, rotation: 0 }; newTransforms[1].scaleX = Number(e.target.value); newTransforms[1].scaleY = Number(e.target.value); handleParamChange('sizeTransforms', newTransforms) }} className="w-16 px-2 py-1 text-sm" />
+                      <input type="number" min={0.1} max={3} step={0.1} value={params.sizeTransforms[1]?.scaleX || 1} onChange={(e) => { const val = Number(e.target.value); const newTransforms = [...params.sizeTransforms]; if (!newTransforms[0]) newTransforms[0] = { position: 0, scaleX: 1, scaleY: 1, rotation: 0 }; if (!newTransforms[1]) newTransforms[1] = { position: 1, scaleX: 1, scaleY: 1, rotation: 0 }; newTransforms[1].scaleX = val; newTransforms[1].scaleY = val; handleParamChange('sizeTransforms', newTransforms) }} className="w-16 px-2 py-1 text-sm" />
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="card">
                   <h3 className="font-display text-base text-charcoal mb-4">Wall Mount</h3>
                   <div className="space-y-3">
@@ -1312,7 +1382,7 @@ function App() {
                       <UnitInput label="Rod" value={params.rodDiameter} onChange={(v) => handleParamChange('rodDiameter', v)} min={0.125} max={1} />
                     </div>
                     <div>
-                      <label className="text-xs text-warm-gray block mb-1">Rods per Rib</label>
+                      <label className="text-xs text-warm-gray block mb-1">Rods per Ryb</label>
                       <input type="range" min={1} max={4} value={params.rodCount} onChange={(e) => handleParamChange('rodCount', Number(e.target.value))} className="w-full accent-terracotta" />
                     </div>
                   </div>
@@ -1328,7 +1398,7 @@ function App() {
             <div className="card bg-stone/20 border border-stone/30 p-6">
               <div className="text-center mb-4">
                 <p className="font-display text-4xl mb-1">${totalPrice}</p>
-                <p className="text-cream/50 text-sm">{params.length.value}{params.length.unit} × {params.height.value}{params.height.unit} • {params.ribCount} {params.ribShape} ribs</p>
+                <p className="text-cream/50 text-sm">{params.length.value}{params.length.unit} × {params.height.value}{params.height.unit} • {params.ribCount} {params.ribShape} rybs</p>
               </div>
               <button className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors" onClick={() => setShowExport(true)}>Export & Order</button>
             </div>
@@ -1357,7 +1427,7 @@ function App() {
       )}
 
       {/* Freeform Drawer */}
-      {showFreeformDrawer && <CustomRybEditor onClose={() => setShowFreeformDrawer(false)} />}
+      {showFreeformDrawer && <CustomRybEditor onSave={(points, sequence) => { setFreeformPoints(points); setCustomRybSequence(sequence); setShowFreeformDrawer(false) }} onClose={() => setShowFreeformDrawer(false)} />}
 
       {/* Footer */}
       <footer className="bg-charcoal text-cream py-8">
