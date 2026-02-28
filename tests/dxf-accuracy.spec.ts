@@ -13,9 +13,10 @@ import { execSync } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 
-const REFERENCE_DXF = path.resolve(__dirname, '../examples/CNC_FILE_105_12MM.dxf')
-const VENV_PYTHON = path.resolve(__dirname, '../.venv/Scripts/python.exe')
-const COMPARE_SCRIPT = path.resolve(__dirname, 'compare_dxf.py')
+const PROJECT_ROOT = process.cwd()
+const REFERENCE_DXF = path.resolve(PROJECT_ROOT, 'examples/CNC_FILE_105_12MM.dxf')
+const VENV_PYTHON = path.resolve(PROJECT_ROOT, '.venv/Scripts/python.exe')
+const COMPARE_SCRIPT = path.resolve(PROJECT_ROOT, 'tests/compare_dxf.py')
 
 test.describe('DXF Export Accuracy', () => {
     test.beforeEach(async ({ page }) => {
@@ -26,7 +27,7 @@ test.describe('DXF Export Accuracy', () => {
 
     test('generates a DXF file with ryb profiles', async ({ page }) => {
         // Open export modal
-        const exportBtn = page.locator('button', { hasText: /Export|Order/ })
+        const exportBtn = page.getByRole('button', { name: 'Export & Order' })
         await exportBtn.click()
         await page.waitForTimeout(500)
 
@@ -38,7 +39,7 @@ test.describe('DXF Export Accuracy', () => {
         await dxfBtn.click()
 
         const download = await downloadPromise
-        const downloadPath = path.join(__dirname, '..', 'test-output', `generated-${Date.now()}.dxf`)
+        const downloadPath = path.join(PROJECT_ROOT, 'test-output', `generated-${Date.now()}.dxf`)
         fs.mkdirSync(path.dirname(downloadPath), { recursive: true })
         await download.saveAs(downloadPath)
 
@@ -56,7 +57,7 @@ test.describe('DXF Export Accuracy', () => {
         }
 
         // Open export modal
-        const exportBtn = page.locator('button', { hasText: /Export|Order/ })
+        const exportBtn = page.getByRole('button', { name: 'Export & Order' })
         await exportBtn.click()
         await page.waitForTimeout(500)
 
@@ -66,7 +67,7 @@ test.describe('DXF Export Accuracy', () => {
         await dxfBtn.click()
 
         const download = await downloadPromise
-        const downloadPath = path.join(__dirname, '..', 'test-output', `backplane-${Date.now()}.dxf`)
+        const downloadPath = path.join(PROJECT_ROOT, 'test-output', `backplane-${Date.now()}.dxf`)
         fs.mkdirSync(path.dirname(downloadPath), { recursive: true })
         await download.saveAs(downloadPath)
 
@@ -101,7 +102,8 @@ test.describe('DXF Export Accuracy', () => {
         }
 
         // Export DXF
-        const exportBtn = page.locator('button', { hasText: /Export|Order/ })
+        const exportBtn = page.getByRole('button', { name: 'Export & Order' })
+        await exportBtn.waitFor({ state: 'visible', timeout: 15000 })
         await exportBtn.click()
         await page.waitForTimeout(500)
 
@@ -110,7 +112,7 @@ test.describe('DXF Export Accuracy', () => {
         await dxfBtn.click()
 
         const download = await downloadPromise
-        const downloadPath = path.join(__dirname, '..', 'test-output', `accuracy-${Date.now()}.dxf`)
+        const downloadPath = path.join(PROJECT_ROOT, 'test-output', `accuracy-${Date.now()}.dxf`)
         fs.mkdirSync(path.dirname(downloadPath), { recursive: true })
         await download.saveAs(downloadPath)
 
@@ -129,7 +131,7 @@ test.describe('DXF Export Accuracy', () => {
         console.log(JSON.stringify(metrics, null, 2))
 
         // The overall score target
-        expect(metrics.overall_score).toBeGreaterThanOrEqual(50) // Start with 50%, iterate up
+        expect(metrics.overall_score).toBeGreaterThanOrEqual(80) // Iterate to > 80% as required
         expect(metrics.ryb_count_generated).toBeGreaterThanOrEqual(10)
         expect(metrics.slot_count_generated).toBeGreaterThanOrEqual(10)
     })

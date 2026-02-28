@@ -197,11 +197,10 @@ def compare_dxfs(generated_path, reference_path):
     
     # Slot dimension accuracy
     if gen_classified['slots'] and ref_classified['slots']:
-        gen_slot_ws = sorted([s['width'] for s in gen_classified['slots']])
-        ref_slot_ws = sorted([s['width'] for s in ref_classified['slots']])
         # Check if slot widths are consistent (should all be ~12mm)
-        gen_consistent = all(abs(w - 12) < 3 for w in gen_slot_ws)
-        ref_consistent = all(abs(w - 12) < 3 for w in ref_slot_ws)
+        # Use min(width, height) to account for rotation/orientation
+        gen_consistent = all(abs(min(s['width'], s['height']) - 12) < 3 for s in gen_classified['slots'])
+        ref_consistent = all(abs(min(s['width'], s['height']) - 12) < 3 for s in ref_classified['slots'])
         metrics['slot_width_consistency'] = gen_consistent and ref_consistent
     else:
         metrics['slot_width_consistency'] = False

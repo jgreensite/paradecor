@@ -1,0 +1,22 @@
+{
+  "generated_path": "test-output/accuracy-1772293447353.dxf",
+  "reference_path": "examples/CNC_FILE_105_12MM.dxf",
+  "shape_count_generated": 626,
+  "shape_count_reference": 351,
+  "shape_count_match": false,
+  "ryb_count_generated": 101,
+  "ryb_count_reference": 97,
+  "ryb_count_match": false,
+  "slot_count_generated": 100,
+  "slot_count_reference": 115,
+  "slot_count_match": false,
+  "sheet_count_generated": 1,
+  "sheet_count_reference": 3,
+  "has_backplane_generated": false,
+  "has_backplane_reference": true,
+  "bounding_box_overlap_rybs": 11.6,
+  "bounding_box_overlap_slots": 0.0,
+  "size_distribution_match": 0.0,
+  "slot_width_consistency": false,
+  "overall_score": 68.0
+}

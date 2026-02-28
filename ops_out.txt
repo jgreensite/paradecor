@@ -1,0 +1,20 @@
+Comparing generated DXF: test-output\accuracy-1772297544796.dxf
+Against reference DXF: examples/CNC_FILE_105_12MM.dxf
+
+========================================
+DXF ACCURACY METRICS
+========================================
+Overall Score:                68.0%
+Shape Count Match:            [No] (626 vs 351)
+Ryb Count Match:              [No] (101 vs 97)
+Slot Count Match:             [No] (100 vs 115)
+Sheet Count:                  1 vs 3
+Has Backplane (Area >500k):   [No]
+Slot Width Consistency:       [No]
+Size Distribution Match:      0.0%
+
+Analysis & Next Steps:
+WARNING: Accuracy is below 80%. Consider fixing:
+  - The backplane polygon area is less than 500,000mm^2.
+  - Some slots have widths deviating from the 12mm material thickness.
+  - Ryb sizes (area distribution) differ significantly from the reference. Is the wave height/ratio configured correctly?
