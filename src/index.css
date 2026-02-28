@@ -130,3 +130,63 @@
     z-index: 1;
   }
 }
+
+/* Mobile-first responsive improvements */
+@media (max-width: 768px) {
+  .card {
+    padding: 1rem !important;
+  }
+
+  h1 {
+    font-size: 1.75rem !important;
+    line-height: 1.2 !important;
+  }
+
+  /* Stack single ryb editor vertically on mobile */
+  .flex.gap-6.items-start {
+    flex-direction: column;
+  }
+
+  /* Full-width canvas on mobile */
+  .w-64.h-64 {
+    width: 100% !important;
+    height: 200px !important;
+  }
+
+  /* Stack axis controls 1-col on mobile */
+  .grid.grid-cols-3.gap-4 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Hide mini preview on very small screens */
+  .absolute.top-0.right-0.w-32.h-32 {
+    display: none;
+  }
+
+  /* Compact view toggle buttons */
+  .flex.gap-1.bg-cream.rounded-lg.p-1 button {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.65rem;
+  }
+
+  /* Full-width stats on mobile */
+  .grid.grid-cols-3.gap-3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Tablet: 2-column where possible */
+  .grid.lg\\:grid-cols-12 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .lg\\:col-span-3 {
+    grid-column: span 1 !important;
+  }
+
+  .lg\\:col-span-6 {
+    grid-column: span 2 !important;
+  }
+}
+
