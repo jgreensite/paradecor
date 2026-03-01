@@ -103,25 +103,62 @@ function createDogboneSlot(width: number, height: number, dogboneRadius: number)
  * Create a simplified slot (rectangle with semicircle ends = stadium/discorectangle shape).
  * This matches the reference DXF where bulge=-1 means perfect semicircle.
  */
-export function createSlotWithDogbone(width: number, height: number): makerjs.IModel {
-    // Stadium shape: rectangle body with semicircle caps
-    const r = width / 2 // radius = half the slot width (material thickness)
-    const bodyH = height - width // body height minus the two semicircle radii
+export function createSlotWithDogbone(width: number, height: number, dogboneRadius: number): makerjs.IModel {
+    // Use true CNC dogbone fillets (circles cut out of the internal corners)
+    // Style 0 (default) does all 4 corners.
+    // If the slot is too small, fallback to a simple rectangle
+    if (width <= dogboneRadius * 2 || height <= dogboneRadius * 2) {
+        const m = new makerjs.models.Rectangle(width, height)
+        makerjs.model.center(m)
+        return m
+    }
+    const m = new makerjs.models.Dogbone(width, height, dogboneRadius, 0, false)
+    makerjs.model.center(m)
+    return m
+}
 
-    if (bodyH <= 0) {
-        // If height <= width, just a circle
-        return { paths: { circle: new makerjs.paths.Circle([0, 0], r) } }
+/**
+ * Create a simple vector number model (stick font style) to avoid needing external TTF fonts.
+ */
+export function createRybNumberModel(num: number, height: number): makerjs.IModel {
+    const models: Record<string, makerjs.IModel> = {}
+    const str = num.toString()
+    const w = height * 0.6
+    const spacing = height * 0.2
+    let curX = 0
+
+    for (let i = 0; i < str.length; i++) {
+        const char = str[i]
+        const paths: Record<string, makerjs.IPath> = {}
+        const segments: number[][][] = []
+
+        switch (char) {
+            case '0': segments.push([[0, 0], [w, 0]], [[w, 0], [w, height]], [[w, height], [0, height]], [[0, height], [0, 0]]); break;
+            case '1': segments.push([[w / 2, 0], [w / 2, height]], [[w / 4, height * 0.75], [w / 2, height]], [[w / 4, 0], [w * 0.75, 0]]); break;
+            case '2': segments.push([[0, height], [w, height]], [[w, height], [w, height / 2]], [[w, height / 2], [0, height / 2]], [[0, height / 2], [0, 0]], [[0, 0], [w, 0]]); break;
+            case '3': segments.push([[0, height], [w, height]], [[w, height], [w, 0]], [[w, 0], [0, 0]], [[0, height / 2], [w, height / 2]]); break;
+            case '4': segments.push([[0, height], [0, height / 2]], [[0, height / 2], [w, height / 2]], [[w, height], [w, 0]]); break;
+            case '5': segments.push([[w, height], [0, height]], [[0, height], [0, height / 2]], [[0, height / 2], [w, height / 2]], [[w, height / 2], [w, 0]], [[w, 0], [0, 0]]); break;
+            case '6': segments.push([[w, height], [0, height]], [[0, height], [0, 0]], [[0, 0], [w, 0]], [[w, 0], [w, height / 2]], [[w, height / 2], [0, height / 2]]); break;
+            case '7': segments.push([[0, height], [w, height]], [[w, height], [0, 0]]); break;
+            case '8': segments.push([[0, 0], [w, 0]], [[w, 0], [w, height]], [[w, height], [0, height]], [[0, height], [0, 0]], [[0, height / 2], [w, height / 2]]); break;
+            case '9': segments.push([[w, height / 2], [0, height / 2]], [[0, height / 2], [0, height]], [[0, height], [w, height]], [[w, height], [w, 0]]); break;
+        }
+
+        let lineIdx = 0
+        for (const seg of segments) {
+            paths[`l${lineIdx++}`] = new makerjs.paths.Line(seg[0], seg[1])
+        }
+
+        const charModel: makerjs.IModel = { paths }
+        makerjs.model.move(charModel, [curX, 0])
+        models[`char_${i}`] = charModel
+        curX += w + spacing
     }
 
-    const halfBody = bodyH / 2
-    const paths: Record<string, makerjs.IPath> = {
-        topArc: new makerjs.paths.Arc([0, halfBody], r, 0, 180),
-        left: new makerjs.paths.Line([-r, halfBody], [-r, -halfBody]),
-        bottomArc: new makerjs.paths.Arc([0, -halfBody], r, 180, 360),
-        right: new makerjs.paths.Line([r, -halfBody], [r, halfBody]),
-    }
-
-    return { paths }
+    const group = { models }
+    makerjs.model.moveRelative(group, [-(curX - spacing) / 2, -height / 2])
+    return group
 }
 
 // ── Backplane outline ──────────────────────────────────────────────────
@@ -169,42 +206,6 @@ export function createOrganicBackplaneOutline(
     return new makerjs.models.ConnectTheDots(true, points)
 }
 
-/**
- * Very simple stroke font for numbers 0-9
- */
-function createTextModel(text: string, scale: number = 1): makerjs.IModel {
-    const DIGITS: Record<string, number[][]> = {
-        '0': [[0, 0], [1, 0], [1, 2], [0, 2], [0, 0]],
-        '1': [[0.5, 0], [0.5, 2]],
-        '2': [[0, 2], [1, 2], [1, 1], [0, 1], [0, 0], [1, 0]],
-        '3': [[0, 2], [1, 2], [1, 1], [0, 1], [1, 1], [1, 0], [0, 0]],
-        '4': [[0, 2], [0, 1], [1, 1], [1, 2], [1, 0]],
-        '5': [[1, 2], [0, 2], [0, 1], [1, 1], [1, 0], [0, 0]],
-        '6': [[1, 2], [0, 2], [0, 0], [1, 0], [1, 1], [0, 1]],
-        '7': [[0, 2], [1, 2], [1, 0]],
-        '8': [[0, 0], [1, 0], [1, 2], [0, 2], [0, 0], [0, 1], [1, 1]],
-        '9': [[1, 0], [1, 2], [0, 2], [0, 1], [1, 1]],
-    }
-    const models: Record<string, makerjs.IModel> = {}
-    let curX = 0
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i]
-        const pts = DIGITS[char]
-        if (pts) {
-            const paths: Record<string, makerjs.IPath> = {}
-            for (let j = 0; j < pts.length - 1; j++) {
-                paths[`l_${j}`] = new makerjs.paths.Line(
-                    [pts[j][0] * scale + curX, pts[j][1] * scale],
-                    [pts[j + 1][0] * scale + curX, pts[j + 1][1] * scale]
-                )
-            }
-            models[`char_${i}`] = { paths }
-        }
-        curX += 1.5 * scale
-    }
-    return { models }
-}
-
 // ── Full CNC sheet layout ──────────────────────────────────────────────
 
 export interface CncSheetLayout {
@@ -215,7 +216,7 @@ export interface CncSheetLayout {
 export function generateCncLayout(
     rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[] }[],
     backplaneParams: BackplaneParams,
-    rybPositions: { x: number; y: number }[], // The actual wave path points where rybs sit
+    rybPositions: { x: number; y: number; angle?: number }[], // The actual wave path points where rybs sit
 ): makerjs.IModel {
     const SHEET_W = 1220
     const SHEET_H = 2440
@@ -262,14 +263,14 @@ export function generateCncLayout(
         }
 
         // Create the ryb shape
-        let rybModel: makerjs.IModel
+        let rybOutlineModel: makerjs.IModel
         const hasTab = backplaneParams.enabled
         const tw = backplaneParams.materialThickness
         const th = backplaneParams.slotDepth
 
         if (profile.shape === 'circle') {
-            rybModel = new makerjs.models.Ellipse(w / 2, h / 2)
-            makerjs.model.move(rybModel, [w / 2, h / 2])
+            rybOutlineModel = new makerjs.models.Ellipse(w / 2, h / 2)
+            makerjs.model.move(rybOutlineModel, [w / 2, h / 2])
         } else if (profile.shape === 'freeform' && profile.freeformPts && profile.freeformPts.length > 2) {
             const fpts = profile.freeformPts
             const minX = Math.min(...fpts.map(p => p.x)), maxX = Math.max(...fpts.map(p => p.x))
@@ -283,17 +284,17 @@ export function generateCncLayout(
             for (let j = 0; j < scaledPts.length; j++) {
                 paths[`l_${j}`] = new makerjs.paths.Line(scaledPts[j], scaledPts[(j + 1) % scaledPts.length])
             }
-            rybModel = { paths }
+            rybOutlineModel = { paths }
         } else {
             if (hasTab) {
                 const ty1 = h / 2 - th / 2
                 const ty2 = h / 2 + th / 2
-                rybModel = new makerjs.models.ConnectTheDots(true, [
+                rybOutlineModel = new makerjs.models.ConnectTheDots(true, [
                     [0, 0], [w, 0], [w, h], [0, h],
                     [0, ty2], [-tw, ty2], [-tw, ty1], [0, ty1]
                 ])
             } else {
-                rybModel = new makerjs.models.ConnectTheDots(true, [
+                rybOutlineModel = new makerjs.models.ConnectTheDots(true, [
                     [0, 0], [w, 0], [w, h], [0, h]
                 ])
             }
@@ -302,9 +303,20 @@ export function generateCncLayout(
         if (hasTab && (profile.shape === 'circle' || profile.shape === 'freeform')) {
             const tab = new makerjs.models.Rectangle(tw + 1, th) // +1 for overlap to ensure clean union
             makerjs.model.move(tab, [-tw, h / 2 - th / 2])
-            makerjs.model.combineUnion(rybModel, tab)
-            rybModel = { models: { base: rybModel, tab } }
+            makerjs.model.combineUnion(rybOutlineModel, tab)
         }
+
+        // Create a new model to hold the outline and the number
+        const rybModel: makerjs.IModel = {
+            paths: rybOutlineModel.paths ? { ...rybOutlineModel.paths } : undefined,
+            models: rybOutlineModel.models ? { ...rybOutlineModel.models } : undefined
+        }
+
+        // Add ryb numbering label
+        const numModel = createRybNumberModel(i + 1, 15) // 15mm high text
+        // We ensure `rybModel` has a models object to attach it to.
+        rybModel.models = rybModel.models || {}
+        rybModel.models.num = numModel
 
         const rybGroup = { models: { outline: rybModel } }
 
@@ -356,7 +368,11 @@ export function generateCncLayout(
             let slotIdx = 0
             for (let i = 0; i < rybPositions.length; i++) {
                 const pos = rybPositions[i]
-                const slotModel = createSlotWithDogbone(slotW, slotH)
+                const slotModel = createSlotWithDogbone(slotW, slotH, backplaneParams.dogboneRadius)
+                if (pos.angle) {
+                    // rotate accepts degrees
+                    makerjs.model.rotate(slotModel, pos.angle)
+                }
                 makerjs.model.move(slotModel, [pos.x, pos.y])
                 bpGroupModels[`slot_${slotIdx}`] = slotModel
                 slotIdx++
@@ -388,7 +404,10 @@ export function generateCncLayout(
             let slotIdx = 0
             for (let i = 0; i < rybPositions.length; i++) {
                 const pos = rybPositions[i]
-                const slotModel = createSlotWithDogbone(slotW, slotH)
+                const slotModel = createSlotWithDogbone(slotW, slotH, backplaneParams.dogboneRadius)
+                if (pos.angle) {
+                    makerjs.model.rotate(slotModel, pos.angle)
+                }
 
                 // Map the slot's wave position into the backplane rectangle
                 const sx = 20 + ((pos.x - waveMinX) / (waveWidth || 1)) * (bpWidth - 40)
@@ -403,8 +422,30 @@ export function generateCncLayout(
             makerjs.model.move(bpGroup, [curX, curY])
         }
 
+        // --- Backplane Extents & Auto-Rotation ---
+        // If the backplane is wider than the sheet width but fits within the height, rotate 90 deg
+        const bpBounds = makerjs.measure.modelExtents(bpGroup)
+        if (bpBounds) {
+            const bpW = bpBounds.high[0] - bpBounds.low[0]
+            const bpH = bpBounds.high[1] - bpBounds.low[1]
+            if (bpW > SHEET_W && bpW <= SHEET_H && bpH <= SHEET_W) {
+                // Better fit if rotated
+                makerjs.model.rotate(bpGroup, 90, [curX, curY]) // Rotate around its placement point
+                // Note: rotating 90 deg pushes it left (negative x) and up (positive y)
+                // Re-measure after rotation
+                const newBounds = makerjs.measure.modelExtents(bpGroup)
+                if (newBounds) {
+                    makerjs.model.moveRelative(bpGroup, [curX - newBounds.low[0], curY - newBounds.low[1]])
+                    curY += (newBounds.high[1] - newBounds.low[1]) + PADDING
+                }
+            } else {
+                curY += bpH + PADDING
+            }
+        } else {
+            curY += bpHeightTotal + PADDING
+        }
+
         models[`backplane`] = bpGroup
-        curY += bpHeightTotal + PADDING
     }
 
     return { models }
