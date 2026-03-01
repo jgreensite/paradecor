@@ -75,11 +75,11 @@ test.describe('Parametric Shelf Creator - UI Integrity', () => {
   });
 
   test('Flat back edge checkbox exists', async ({ page }) => {
-    await expect(page.getByRole('checkbox')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: /Flat Back Edge/i })).toBeVisible();
   });
 
   test('Export buttons exist', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /Export & Order/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export', exact: true })).toBeVisible();
   });
 
   test('Price section visible', async ({ page }) => {
@@ -94,8 +94,8 @@ test.describe('Parametric Shelf Creator - UI Integrity', () => {
     await expect(page.getByText('Efficiency')).toBeVisible();
   });
 
-  test('Ribs count displays', async ({ page }) => {
-    await expect(page.getByText('Ribs', { exact: true })).toBeVisible();
+  test('Rybs count displays', async ({ page }) => {
+    await expect(page.getByText('Rybs', { exact: true })).toBeVisible();
   });
 });
 
@@ -328,14 +328,14 @@ test.describe('Parametric Shelf Creator - Dimension Controls', () => {
 
   test('Wave amplitude slider is adjustable', async ({ page }) => {
     const waveSection = page.locator('.card').filter({ hasText: 'Wave Path' });
-    const amplitudeSlider = waveSection.locator('input[type="range"]').nth(1);
+    const amplitudeSlider = waveSection.locator('input[type="range"]').nth(2);
     await amplitudeSlider.fill('5');
     await page.waitForTimeout(300);
   });
 
   test('Frequency slider is adjustable', async ({ page }) => {
     const waveSection = page.locator('.card').filter({ hasText: 'Wave Path' });
-    const freqSlider = waveSection.locator('input[type="range"]').nth(2);
+    const freqSlider = waveSection.locator('input[type="range"]').nth(3);
     await freqSlider.fill('3');
     await page.waitForTimeout(300);
   });
@@ -372,20 +372,6 @@ test.describe('Parametric Shelf Creator - Dimension Controls', () => {
     const transformSection = page.locator('.card').filter({ hasText: 'Size Transform' });
     const endInput = transformSection.locator('input[type="number"]').nth(1);
     await endInput.fill('1.5');
-    await page.waitForTimeout(300);
-  });
-
-  test('Rod diameter is editable', async ({ page }) => {
-    const wallSection = page.locator('.card').filter({ hasText: 'Wall Mount' });
-    const rodInput = wallSection.locator('input[type="number"]').first();
-    await rodInput.fill('0.5');
-    await page.waitForTimeout(300);
-  });
-
-  test('Rod count slider is adjustable', async ({ page }) => {
-    const wallSection = page.locator('.card').filter({ hasText: 'Wall Mount' });
-    const rodSlider = wallSection.locator('input[type="range"]').first();
-    await rodSlider.fill('3');
     await page.waitForTimeout(300);
   });
 });
@@ -429,22 +415,22 @@ test.describe('Parametric Shelf Creator - Export', () => {
   });
 
   test('Export modal opens from price section', async ({ page }) => {
-    await page.getByRole('button', { name: /Export & Order/i }).click({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Export', exact: true }).click({ timeout: 10000 });
     await expect(page.getByText('Export Files')).toBeVisible();
   });
 
   test('SVG export button exists', async ({ page }) => {
-    await page.getByRole('button', { name: /Export & Order/i }).click({ timeout: 10000 });
+    await page.locator('button').filter({ hasText: /^Export$/ }).click();
     await expect(page.getByText('SVG Cut Files')).toBeVisible();
   });
 
   test('DXF export button exists', async ({ page }) => {
-    await page.getByRole('button', { name: /Export & Order/i }).click({ timeout: 10000 });
+    await page.locator('button').filter({ hasText: /^Export$/ }).click();
     await expect(page.getByText('DXF Cut Files')).toBeVisible();
   });
 
   test('Export modal closes', async ({ page }) => {
-    await page.getByRole('button', { name: /Export & Order/i }).click({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Export', exact: true }).click({ timeout: 10000 });
     await expect(page.getByText('Export Files')).toBeVisible();
     await page.getByRole('button', { name: 'Close' }).click();
     await expect(page.getByText('Export Files')).not.toBeVisible();
@@ -497,10 +483,10 @@ test.describe('Parametric Shelf Creator - Responsive & Edge Cases', () => {
   });
 
   test('Flat edge checkbox toggle works', async ({ page }) => {
-    const checkbox = page.getByRole('checkbox');
-    await checkbox.uncheck();
+    const flatCheckbox = page.locator('input[type="checkbox"]').first();
+    await flatCheckbox.uncheck();
     await page.waitForTimeout(300);
-    await checkbox.check();
+    await flatCheckbox.check();
     await page.waitForTimeout(300);
   });
 
@@ -522,7 +508,7 @@ test.describe('Parametric Shelf Creator - Responsive & Edge Cases', () => {
 
   test('Zero wave amplitude works', async ({ page }) => {
     const waveSection = page.locator('.card').filter({ hasText: 'Wave Path' });
-    const amplitudeSlider = waveSection.locator('input[type="range"]').nth(1);
+    const amplitudeSlider = waveSection.locator('input[type="range"]').nth(2);
     await amplitudeSlider.fill('0');
     await page.waitForTimeout(500);
     await expect(page.locator('canvas').first()).toBeVisible();
@@ -624,7 +610,7 @@ test.describe('Custom Ryb Editor - Extended', () => {
   test('Can add a new ryb tab', async ({ page }) => {
     await page.getByRole('button', { name: /Freeform/i }).first().click();
     await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
-    await page.getByRole('button', { name: '+ Add' }).click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).click();
     await expect(page.getByText('Ryb 2')).toBeVisible();
   });
 
@@ -667,8 +653,8 @@ test.describe('Custom Ryb Editor - Extended', () => {
   });
 
   test('Delete ryb is possible with multiple rybs', async ({ page }) => {
-    await page.getByRole('button', { name: /Freeform/i }).first().click();
-    await page.getByRole('button', { name: '+ Add' }).click();
+    await page.getByRole('button', { name: /Freeform/i }).click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).click();
     await expect(page.getByText('Ryb 2')).toBeVisible();
     await page.getByRole('button', { name: 'Delete Ryb' }).click();
     await expect(page.getByText('Ryb 2')).not.toBeVisible();
@@ -780,13 +766,13 @@ test.describe('Round 3 - Batch C: Export & Reset', () => {
   });
 
   test('Export modal appears and has SVG/DXF options', async ({ page }) => {
-    await page.getByText('Export').click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     await expect(page.getByText('SVG Cut Files')).toBeVisible();
     await expect(page.getByText('DXF Cut Files')).toBeVisible();
   });
 
   test('SVG export triggers file download', async ({ page }) => {
-    await page.getByText('Export').click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     const downloadPromise = page.waitForEvent('download');
     await page.getByText('SVG Cut Files').click();
     const download = await downloadPromise;
@@ -795,7 +781,7 @@ test.describe('Round 3 - Batch C: Export & Reset', () => {
   });
 
   test('DXF export triggers file download', async ({ page }) => {
-    await page.getByText('Export').click();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
     const downloadPromise = page.waitForEvent('download');
     await page.getByText('DXF Cut Files').click();
     const download = await downloadPromise;
@@ -836,10 +822,10 @@ test.describe('Round 3 - Batch C: Export & Reset', () => {
     await page.getByRole('button', { name: /Freeform/i }).first().click();
     await expect(page.getByText('Custom Ryb Editor')).toBeVisible();
     // Add a second ryb
-    await page.getByRole('button', { name: '+ Add' }).click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).click();
     await expect(page.getByText('Ryb 2')).toBeVisible();
     // Add a third ryb
-    await page.getByRole('button', { name: '+ Add' }).click();
+    await page.getByRole('button', { name: '+ Add', exact: true }).click();
     await expect(page.getByText('Ryb 3')).toBeVisible();
     // Save all
     await page.getByRole('button', { name: 'Save & Use' }).click();

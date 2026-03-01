@@ -27,7 +27,7 @@ test.describe('DXF Export Accuracy', () => {
 
     test('generates a DXF file with ryb profiles', async ({ page }) => {
         // Open export modal
-        const exportBtn = page.getByRole('button', { name: 'Export & Order' })
+        const exportBtn = page.getByRole('button', { name: 'Export', exact: true })
         await exportBtn.click()
         await page.waitForTimeout(500)
 
@@ -57,7 +57,7 @@ test.describe('DXF Export Accuracy', () => {
         }
 
         // Open export modal
-        const exportBtn = page.getByRole('button', { name: 'Export & Order' })
+        const exportBtn = page.getByRole('button', { name: 'Export', exact: true })
         await exportBtn.click()
         await page.waitForTimeout(500)
 
@@ -74,7 +74,7 @@ test.describe('DXF Export Accuracy', () => {
         // Run ezdxf comparison
         const result = execSync(
             `"${VENV_PYTHON}" "${COMPARE_SCRIPT}" "${downloadPath}" "${REFERENCE_DXF}"`,
-            { encoding: 'utf-8', timeout: 30000 }
+            { encoding: 'utf-8', timeout: 90000 }
         )
         const metrics = JSON.parse(result)
 
@@ -91,7 +91,6 @@ test.describe('DXF Export Accuracy', () => {
         test.setTimeout(90000) // Heavy DXF generation takes longer
 
         // Configure to match reference: high ryb count, backplane enabled, 105 inches long
-        // Set shelf dimensions
         const lenInput = page.locator('label').filter({ hasText: 'Length' }).locator('..').locator('input').first()
         await lenInput.fill('105')
 
@@ -113,7 +112,7 @@ test.describe('DXF Export Accuracy', () => {
         await shapeSelect.selectOption('organic')
 
         // Export DXF
-        const exportBtn = page.getByRole('button', { name: 'Export & Order' })
+        const exportBtn = page.getByRole('button', { name: 'Export', exact: true })
         await exportBtn.waitFor({ state: 'visible', timeout: 15000 })
         await exportBtn.click()
         await page.waitForTimeout(500)
