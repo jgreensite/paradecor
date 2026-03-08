@@ -186,20 +186,20 @@ export function createBackplaneOutline(
  * Generate an organic backplane outline that follows the wave path smoothly.
  */
 export function createOrganicBackplaneOutline(
-    rybPositions: { x: number; y: number }[],
+    highResWavePath: { x: number; y: number }[],
     maxRybHeight: number,
     organicOffset: number
 ): makerjs.IModel {
     const points: number[][] = []
 
     // Top curve
-    for (let i = 0; i < rybPositions.length; i++) {
-        const p = rybPositions[i]
+    for (let i = 0; i < highResWavePath.length; i++) {
+        const p = highResWavePath[i]
         points.push([p.x, p.y + maxRybHeight / 2 + organicOffset])
     }
     // Bottom curve
-    for (let i = rybPositions.length - 1; i >= 0; i--) {
-        const p = rybPositions[i]
+    for (let i = highResWavePath.length - 1; i >= 0; i--) {
+        const p = highResWavePath[i]
         points.push([p.x, p.y - maxRybHeight / 2 - organicOffset])
     }
 
@@ -217,6 +217,7 @@ export function generateCncLayout(
     rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[] }[],
     backplaneParams: BackplaneParams,
     rybPositions: { x: number; y: number; angle?: number }[], // The actual wave path points where rybs sit
+    highResWavePath?: { x: number; y: number }[] // Used explicitly to draw a smooth curve for the backplane outline
 ): makerjs.IModel {
     const SHEET_W = 1220
     const SHEET_H = 2440
@@ -362,7 +363,8 @@ export function generateCncLayout(
                 curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
             }
 
-            const bpOutline = createOrganicBackplaneOutline(rybPositions, maxRybHeight, backplaneParams.organicOffset)
+            const outlinePath = highResWavePath || rybPositions;
+            const bpOutline = createOrganicBackplaneOutline(outlinePath, maxRybHeight, backplaneParams.organicOffset)
             const bpGroupModels: Record<string, makerjs.IModel> = { outline: bpOutline }
 
             let slotIdx = 0
