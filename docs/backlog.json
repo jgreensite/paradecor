@@ -6,7 +6,7 @@
         "last_updated": "2026-02-28T07:42:00Z",
         "linear_team_key": "RYB",
         "config": {
-            "_comment": "Developer-configurable animation parameters — change values here only",
+            "_comment": "Developer-configurable animation parameters â€” change values here only",
             "preview_cycle_interval_ms": 10000,
             "preview_fade_duration_ms": 800,
             "camera_sweep_speed": 0.15,
@@ -281,6 +281,47 @@
             "dependencies": [
                 "RYB-028"
             ]
+        },
+        {
+            "id": "RYB-030",
+            "epic": "EPIC-01",
+            "title": "Restore top-right shelf preview",
+            "description": "The main shelf preview in the top right was dropped, leaving only the single ryb preview overlay. Restore the full parametric shelf view.",
+            "status": "done",
+            "priority": "P0",
+            "labels": [
+                "preview",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-031",
+            "epic": "EPIC-09",
+            "title": "Fix DXF backplane wave shape mismatch",
+            "description": "The wave contour produced in the DXF backplane does not reflect the interpolated wave shape configured in the website UI.",
+            "status": "done",
+            "priority": "P0",
+            "labels": [
+                "backplane",
+                "export",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-032",
+            "epic": "EPIC-07",
+            "title": "Ensure Dogbone fillets are actually present in DXF",
+            "description": "Dogbone fillets aren't rendering in the exported DXF.",
+            "status": "done",
+            "priority": "P0",
+            "labels": [
+                "cnc",
+                "backplane",
+                "bugfix"
+            ],
+            "dependencies": []
         }
     ]
 }
