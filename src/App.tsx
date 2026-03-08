@@ -1339,6 +1339,17 @@ function App() {
   const [expandedShelfEditor, setExpandedShelfEditor] = useState(false)
   const [selectedRibIndex, setSelectedRibIndex] = useState<number | undefined>(undefined)
 
+  // Map a keyframe index (within customRybSequence.rybs) to the corresponding shelf position index
+  const keyframeToShelfIndex = useCallback((keyframeIdx: number): number | undefined => {
+    if (!customRybSequence || customRybSequence.rybs.length <= 1) return undefined
+    const K = customRybSequence.rybs.length
+    const N = params.ribCount
+    if (N <= 1) return 0
+    // keyframe k is at t = k / (K - 1), shelf position = round(t * (N - 1))
+    const t = keyframeIdx / (K - 1)
+    return Math.round(t * (N - 1))
+  }, [customRybSequence, params.ribCount])
+
   // Only pass freeform points when shape is actually freeform
   const activeFreeformPoints = params.ribShape === 'freeform' ? freeformPoints : undefined
 
@@ -1569,9 +1580,9 @@ function App() {
                     <h3 className="font-display text-base text-charcoal">Single Ryb Editor</h3>
                     {customRybSequence && customRybSequence.rybs.length > 1 && (
                       <div className="flex items-center gap-1 bg-cream rounded-lg px-2 py-0.5">
-                        <button onClick={() => { const idx = Math.max(0, (customRybSequence.selectedIndex || 0) - 1); setCustomRybSequence({ ...customRybSequence, selectedIndex: idx }); setSelectedRibIndex(idx) }} className="px-1.5 py-0.5 text-xs rounded hover:bg-stone/10 transition-all text-charcoal">◀</button>
+                        <button onClick={() => { const idx = Math.max(0, (customRybSequence.selectedIndex || 0) - 1); setCustomRybSequence({ ...customRybSequence, selectedIndex: idx }); setSelectedRibIndex(keyframeToShelfIndex(idx)) }} className="px-1.5 py-0.5 text-xs rounded hover:bg-stone/10 transition-all text-charcoal">◀</button>
                         <span className="text-xs text-charcoal font-medium px-1">Ryb {(customRybSequence.selectedIndex || 0) + 1}/{customRybSequence.rybs.length}</span>
-                        <button onClick={() => { const idx = Math.min(customRybSequence.rybs.length - 1, (customRybSequence.selectedIndex || 0) + 1); setCustomRybSequence({ ...customRybSequence, selectedIndex: idx }); setSelectedRibIndex(idx) }} className="px-1.5 py-0.5 text-xs rounded hover:bg-stone/10 transition-all text-charcoal">▶</button>
+                        <button onClick={() => { const idx = Math.min(customRybSequence.rybs.length - 1, (customRybSequence.selectedIndex || 0) + 1); setCustomRybSequence({ ...customRybSequence, selectedIndex: idx }); setSelectedRibIndex(keyframeToShelfIndex(idx)) }} className="px-1.5 py-0.5 text-xs rounded hover:bg-stone/10 transition-all text-charcoal">▶</button>
                       </div>
                     )}
                   </div>

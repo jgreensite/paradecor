@@ -62,6 +62,31 @@
             "description": "Recreate the original test CNC file's complex organic backplane shape within the app, and ensure full physical interlocking (slots + tabs on rybs) for manufacturing.",
             "status": "todo",
             "priority": "P0"
+        },
+        {
+            "id": "EPIC-10",
+            "title": "Editor Refinements",
+            "description": "Fix highlighting bugs, add freeform drawing tools (pen, delete, convert), improve custom ryb editing workflow."
+        },
+        {
+            "id": "EPIC-11",
+            "title": "Dynamic Backplane Geometry",
+            "description": "Compute rotation-aware slot widths, handle freeform projections, optimise backplane surface for ryb clearance."
+        },
+        {
+            "id": "EPIC-12",
+            "title": "Authentication & Access Control",
+            "description": "Integrate Clerk auth with RBAC. Gate downloads behind sign-in with admin role check."
+        },
+        {
+            "id": "EPIC-13",
+            "title": "Payments",
+            "description": "Stripe integration for shelf cut file purchases. Checkout sessions, webhooks, order metadata."
+        },
+        {
+            "id": "EPIC-14",
+            "title": "Order Management & Fulfilment",
+            "description": "Supabase order model, admin dashboard, manufacturing partner API, shipping tracking."
         }
     ],
     "stories": [
@@ -362,6 +387,292 @@
                 "rendering"
             ],
             "dependencies": []
+        },
+        {
+            "id": "RYB-036",
+            "epic": "EPIC-10",
+            "title": "Fix keyframe highlighting (highlight designed rybs, not tweens)",
+            "description": "Map keyframe index to shelf position using t-parameter formula so the highlighted rib is the actual keyframe, not an interpolated tween.",
+            "status": "done",
+            "priority": "P0",
+            "labels": [
+                "editor",
+                "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-037",
+            "epic": "EPIC-10",
+            "title": "Freeform pen tool (add line/bezier segments)",
+            "description": "Add a pen tool to the CustomRybEditor that allows clicking to add line segments and dragging to create bezier curves.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-038",
+            "epic": "EPIC-10",
+            "title": "Freeform delete tool (remove points/segments)",
+            "description": "Add a delete tool to remove individual points or entire curve segments from freeform ryb designs.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-039",
+            "epic": "EPIC-10",
+            "title": "Freeform segment type conversion (line↔bezier)",
+            "description": "Allow converting between line and bezier segment types by clicking on a segment in the editor.",
+            "status": "todo",
+            "priority": "P2",
+            "labels": [
+                "editor",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-040",
+            "epic": "EPIC-11",
+            "title": "Rotation-aware slot width computation",
+            "description": "Compute backplane slot width from the projected cross-section of each rotated ryb onto the backplane plane.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "backplane",
+                "geometry"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-041",
+            "epic": "EPIC-11",
+            "title": "Freeform shape projected slot width",
+            "description": "Compute slot width for freeform shapes using convex hull projection.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "backplane",
+                "geometry"
+            ],
+            "dependencies": [
+                "RYB-040"
+            ]
+        },
+        {
+            "id": "RYB-042",
+            "epic": "EPIC-11",
+            "title": "Backplane surface optimisation for ryb clearance",
+            "description": "Optimise backplane surface contour so all rybs exit cleanly regardless of shape/rotation.",
+            "status": "todo",
+            "priority": "P2",
+            "labels": [
+                "backplane",
+                "geometry"
+            ],
+            "dependencies": [
+                "RYB-041"
+            ]
+        },
+        {
+            "id": "RYB-043",
+            "epic": "EPIC-11",
+            "title": "Slot width visual feedback in 3D preview",
+            "description": "Show computed slot widths and highlight too-narrow slots in red in the 3D editor.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "editor",
+                "rendering"
+            ],
+            "dependencies": [
+                "RYB-040"
+            ]
+        },
+        {
+            "id": "RYB-044",
+            "epic": "EPIC-12",
+            "title": "Integrate Clerk auth (sign-in/up components)",
+            "description": "Add Clerk provider and prebuilt sign-in/sign-up components to the app.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "auth",
+                "feature"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-045",
+            "epic": "EPIC-12",
+            "title": "Gate DXF/SVG download behind auth",
+            "description": "Wrap export download buttons in Clerk SignedIn/SignedOut to require authentication.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "auth",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-044"
+            ]
+        },
+        {
+            "id": "RYB-046",
+            "epic": "EPIC-12",
+            "title": "Admin role check for downloads",
+            "description": "Only users with admin role can download cut files. Uses Clerk publicMetadata.role.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "auth",
+                "rbac"
+            ],
+            "dependencies": [
+                "RYB-045"
+            ]
+        },
+        {
+            "id": "RYB-047",
+            "epic": "EPIC-12",
+            "title": "Sign-in to download UX (non-intrusive)",
+            "description": "Show a friendly 'Sign in to download' prompt instead of hiding the export button.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "auth",
+                "ux"
+            ],
+            "dependencies": [
+                "RYB-044"
+            ]
+        },
+        {
+            "id": "RYB-048",
+            "epic": "EPIC-13",
+            "title": "Stripe integration (Checkout Sessions)",
+            "description": "Integrate Stripe Checkout for shelf cut file purchases.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "payments",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-044"
+            ]
+        },
+        {
+            "id": "RYB-049",
+            "epic": "EPIC-13",
+            "title": "Payment success webhook handler",
+            "description": "Handle Stripe payment_intent.succeeded webhook to unlock DXF download.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "payments",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-048"
+            ]
+        },
+        {
+            "id": "RYB-050",
+            "epic": "EPIC-13",
+            "title": "Shelf config stored as order metadata",
+            "description": "Attach full shelf parameters to the Stripe checkout session metadata.",
+            "status": "todo",
+            "priority": "P1",
+            "labels": [
+                "payments",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-048"
+            ]
+        },
+        {
+            "id": "RYB-051",
+            "epic": "EPIC-13",
+            "title": "Feature-flagged Order button",
+            "description": "Add an Order button that is hidden behind a feature flag until payment flow is validated.",
+            "status": "todo",
+            "priority": "P0",
+            "labels": [
+                "payments",
+                "ux"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-052",
+            "epic": "EPIC-14",
+            "title": "Order data model (Supabase)",
+            "description": "Create orders table in Supabase with shelf config, payment status, and fulfilment tracking.",
+            "status": "todo",
+            "priority": "P2",
+            "labels": [
+                "orders",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-049"
+            ]
+        },
+        {
+            "id": "RYB-053",
+            "epic": "EPIC-14",
+            "title": "Admin order dashboard page",
+            "description": "Internal admin page to view orders, statuses, and DXF files.",
+            "status": "todo",
+            "priority": "P2",
+            "labels": [
+                "orders",
+                "admin"
+            ],
+            "dependencies": [
+                "RYB-052"
+            ]
+        },
+        {
+            "id": "RYB-054",
+            "epic": "EPIC-14",
+            "title": "Manufacturing partner API integration",
+            "description": "Integrate with SendCutSend/Xometry/Ponoko API to submit DXF files for CNC cutting.",
+            "status": "todo",
+            "priority": "P3",
+            "labels": [
+                "fulfilment",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-052"
+            ]
+        },
+        {
+            "id": "RYB-055",
+            "epic": "EPIC-14",
+            "title": "Shipping tracking integration",
+            "description": "Integrate with ShipStation or AfterShip to provide order tracking to customers.",
+            "status": "todo",
+            "priority": "P3",
+            "labels": [
+                "fulfilment",
+                "feature"
+            ],
+            "dependencies": [
+                "RYB-054"
+            ]
         }
     ]
 }
