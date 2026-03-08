@@ -208,6 +208,7 @@
             "labels": [
                 "feature"
             ],
+            "last_updated": "2026-03-08T09:15:00Z",
             "dependencies": []
         },
         {
@@ -215,7 +216,7 @@
             "epic": "EPIC-07",
             "title": "DXF accuracy testing against reference CNC file",
             "description": "Empirical test harness using ezdxf (Python) to parse generated DXF and compare to reference CNC_FILE_105_12MM.dxf. Measures ryb count, slot count, backplane presence, and shape accuracy. Target 80% accuracy.",
-            "status": "in-progress",
+            "status": "done",
             "priority": "P0",
             "labels": [
                 "testing",
@@ -230,7 +231,7 @@
             "epic": "EPIC-08",
             "title": "Centralize ops scripts into para_ops.py",
             "description": "Create a unified python script `scripts/para_ops.py` to handle all operational tasks (running Playwright tools, parsing DXF score metrics, running servers), replacing inline hacky scripts with robust tooling.",
-            "status": "in-progress",
+            "status": "done",
             "priority": "high",
             "labels": [
                 "ops",
@@ -320,6 +321,45 @@
                 "cnc",
                 "backplane",
                 "bugfix"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-033",
+            "epic": "EPIC-02",
+            "title": "Persistent 3D Camera State",
+            "description": "Camera orbit position is preserved during parameter edits using useFrame-based initialization logic.",
+            "status": "done",
+            "priority": "high",
+            "labels": [
+                "editor",
+                "camera"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-034",
+            "epic": "EPIC-02",
+            "title": "Custom Ryb Cycling in Single Editor",
+            "description": "Added navigation arrows to cycle through custom rybs in the single ryb editor.",
+            "status": "done",
+            "priority": "medium",
+            "labels": [
+                "editor",
+                "ux"
+            ],
+            "dependencies": []
+        },
+        {
+            "id": "RYB-035",
+            "epic": "EPIC-02",
+            "title": "Selected Rib Highlighting",
+            "description": "The custom ryb currently being edited is highlighted with an emissive material in the full shelf view.",
+            "status": "done",
+            "priority": "medium",
+            "labels": [
+                "editor",
+                "rendering"
             ],
             "dependencies": []
         }
