@@ -405,7 +405,7 @@ function generateAllRibParams(params: ShelfParams, wavePath: { x: number, y: num
   return profiles
 }
 
-function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null): { geometries: THREE.BufferGeometry[], positions: { x: number, y: number, z: number }[], rotations: number[] } {
+function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null): { geometries: THREE.BufferGeometry[], positions: { x: number, y: number, z: number }[], rotations: number[], profiles: any[] } {
   const lengthMM = toMM(params.length)
   const waveHeightMM = toMM(params.height)
   const baseZ = toMM(params.ribZ.physical) * params.ribZ.factor
@@ -431,19 +431,38 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
     rotations.push(0)
   }
 
-  return { geometries, positions, rotations }
+  return { geometries, positions, rotations, profiles }
 }
 
-function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled, shape, organicOffset, ribHeightMM }: { wavePath: { x: number, y: number, z: number }[], lengthMM: number, depthMM: number, materialThicknessMM: number, enabled: boolean, shape: 'rectangular' | 'organic', organicOffset: number, ribHeightMM: number }) {
+function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled, shape, organicOffset, rybNodes }: { wavePath: { x: number, y: number, z: number }[], lengthMM: number, depthMM: number, materialThicknessMM: number, enabled: boolean, shape: 'rectangular' | 'organic', organicOffset: number, rybNodes: { x: number, h: number }[] }) {
   if (!enabled || wavePath.length < 2) return null
 
   const bpDepth = materialThicknessMM
 
+  const getH = (x: number) => {
+    if (rybNodes.length === 0) return 0;
+    if (x <= rybNodes[0].x) return rybNodes[0].h;
+    if (x >= rybNodes[rybNodes.length - 1].x) return rybNodes[rybNodes.length - 1].h;
+    for (let i = 0; i < rybNodes.length - 1; i++) {
+      if (x >= rybNodes[i].x && x <= rybNodes[i + 1].x) {
+        const range = rybNodes[i + 1].x - rybNodes[i].x;
+        if (range === 0) return rybNodes[i].h;
+        return rybNodes[i].h + ((x - rybNodes[i].x) / range) * (rybNodes[i + 1].h - rybNodes[i].h);
+      }
+    }
+    return rybNodes[0].h;
+  }
+
   if (shape === 'organic') {
     // Generate a shape that follows the wave path at both top and bottom to create a 'ribbon'
-    const ribbonHeight = ribHeightMM + organicOffset
-    const bottomPoints = wavePath.map(p => new THREE.Vector2(p.x, p.y - ribbonHeight / 2))
-    const topPoints = [...wavePath].reverse().map(p => new THREE.Vector2(p.x, p.y + ribbonHeight / 2))
+    const bottomPoints = wavePath.map(p => {
+      const ribbonHeight = getH(p.x) + (organicOffset * 2);
+      return new THREE.Vector2(p.x, p.y - ribbonHeight / 2)
+    })
+    const topPoints = [...wavePath].reverse().map(p => {
+      const ribbonHeight = getH(p.x) + (organicOffset * 2);
+      return new THREE.Vector2(p.x, p.y + ribbonHeight / 2)
+    })
 
     const fullShape = new THREE.Shape()
     if (bottomPoints.length > 0) {
@@ -464,8 +483,8 @@ function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled
   }
 
   // Fallback to rectangular box but with height following the wave's bounding box
-  const minY = Math.min(...wavePath.map(p => p.y)) - ribHeightMM / 2
-  const maxY = Math.max(...wavePath.map(p => p.y)) + ribHeightMM / 2
+  const minY = Math.min(...wavePath.map(p => p.y - getH(p.x) / 2))
+  const maxY = Math.max(...wavePath.map(p => p.y + getH(p.x) / 2))
   const bpHeight = maxY - minY
   const centerX = (wavePath[0].x + wavePath[wavePath.length - 1].x) / 2
   const centerY = (minY + maxY) / 2
@@ -634,7 +653,17 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
     [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, params.sizeTransforms]
   )
 
-  const { geometries, positions, rotations } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
+  const { geometries, positions, rotations, profiles } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
+
+  const rybNodes = useMemo(() => {
+    return positions.map((pos, i) => {
+      const p = profiles[i]
+      const Rx = (p.rotateX || 0) * Math.PI / 180
+      const tz = params.ribZ.physical.value * params.ribZ.factor
+      const h = p.height * Math.abs(Math.cos(Rx)) + tz * Math.abs(Math.sin(Rx))
+      return { x: pos.x, h }
+    })
+  }, [positions, profiles, params.ribZ.physical.value, params.ribZ.factor])
 
   useEffect(() => {
     return () => {
@@ -669,7 +698,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
         enabled={params.backplaneEnabled}
         shape={params.backplaneShape}
         organicOffset={params.backplaneOrganicOffset}
-        ribHeightMM={toMM(params.ribY.physical) * params.ribY.factor}
+        rybNodes={rybNodes}
       />
     </group>
   )

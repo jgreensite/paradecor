@@ -197,12 +197,30 @@ export function createBackplaneOutline(
     ])
 }
 
+function getInterpolatedHeight(x: number, nodes: { x: number, h: number }[]): number {
+    if (nodes.length === 0) return 0;
+    if (x <= nodes[0].x) return nodes[0].h;
+    if (x >= nodes[nodes.length - 1].x) return nodes[nodes.length - 1].h;
+
+    for (let i = 0; i < nodes.length - 1; i++) {
+        const n1 = nodes[i];
+        const n2 = nodes[i + 1];
+        if (x >= n1.x && x <= n2.x) {
+            const range = n2.x - n1.x;
+            if (range === 0) return n1.h;
+            const t = (x - n1.x) / range;
+            return n1.h + t * (n2.h - n1.h);
+        }
+    }
+    return nodes[0].h;
+}
+
 /**
  * Generate an organic backplane outline that follows the wave path smoothly.
  */
 export function createOrganicBackplaneOutline(
     highResWavePath: { x: number; y: number }[],
-    maxRybHeight: number,
+    rybNodes: { x: number; h: number }[],
     organicOffset: number
 ): makerjs.IModel {
     const points: number[][] = []
@@ -210,12 +228,14 @@ export function createOrganicBackplaneOutline(
     // Top curve
     for (let i = 0; i < highResWavePath.length; i++) {
         const p = highResWavePath[i]
-        points.push([p.x, p.y + maxRybHeight / 2 + organicOffset])
+        const h = getInterpolatedHeight(p.x, rybNodes)
+        points.push([p.x, p.y + h / 2 + organicOffset])
     }
     // Bottom curve
     for (let i = highResWavePath.length - 1; i >= 0; i--) {
         const p = highResWavePath[i]
-        points.push([p.x, p.y - maxRybHeight / 2 - organicOffset])
+        const h = getInterpolatedHeight(p.x, rybNodes)
+        points.push([p.x, p.y - h / 2 - organicOffset])
     }
 
     return new makerjs.models.ConnectTheDots(true, points)
@@ -366,7 +386,15 @@ export function generateCncLayout(
         // Slot base geometry is now computed dynamically per ryb based on its rotation
 
         if (backplaneParams.shape === 'organic') {
-            const maxRybHeight = Math.max(...rybProfiles.map(p => p.height))
+            const rybNodes = rybPositions.map((pos, i) => {
+                const profile = rybProfiles[i]
+                const Rx = (profile.rotateX || 0) * Math.PI / 180
+                const tz = profile.thickness || backplaneParams.materialThickness
+                const h = profile.height * Math.abs(Math.cos(Rx)) + tz * Math.abs(Math.sin(Rx))
+                return { x: pos.x, h }
+            })
+
+            const maxRybHeight = Math.max(...rybNodes.map(n => n.h))
             bpHeightTotal = maxRybHeight + (backplaneParams.organicOffset * 2)
 
             curX = PADDING
@@ -378,7 +406,7 @@ export function generateCncLayout(
             }
 
             const outlinePath = highResWavePath || rybPositions;
-            const bpOutline = createOrganicBackplaneOutline(outlinePath, maxRybHeight, backplaneParams.organicOffset)
+            const bpOutline = createOrganicBackplaneOutline(outlinePath, rybNodes, backplaneParams.organicOffset)
             const bpGroupModels: Record<string, makerjs.IModel> = { outline: bpOutline }
 
             let slotIdx = 0
