@@ -60,6 +60,21 @@ export function generateSlots(
 // ── Makerjs model generation ───────────────────────────────────────────
 
 /**
+ * Compute the 2D projected dimensions of a rotated 3D tab onto the backplane.
+ */
+export function computeProjectedSlotDimensions(profile: { rotateX?: number; rotateY?: number; rotateZ?: number; thickness?: number }, tw: number, th: number) {
+    const Rx = (profile.rotateX || 0) * Math.PI / 180
+    const Ry = (profile.rotateY ?? -90) * Math.PI / 180
+    const tz = profile.thickness || tw
+
+    const w = tw * Math.abs(Math.cos(Ry)) + th * Math.abs(Math.sin(Rx) * Math.sin(Ry)) + tz * Math.abs(Math.cos(Rx) * Math.sin(Ry))
+    const h = th * Math.abs(Math.cos(Rx)) + tz * Math.abs(Math.sin(Rx))
+    const shiftX = (-tw / 2) * Math.cos(Ry)
+
+    return { w, h, shiftX }
+}
+
+/**
  * Create a single slot shape with dogbone fillets at each end.
  * The slot is a rectangle with semicircular bulges at each short end.
  */
@@ -214,7 +229,7 @@ export interface CncSheetLayout {
 }
 
 export function generateCncLayout(
-    rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[] }[],
+    rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[]; rotateX?: number; rotateY?: number; rotateZ?: number; thickness?: number }[],
     backplaneParams: BackplaneParams,
     rybPositions: { x: number; y: number; angle?: number }[], // The actual wave path points where rybs sit
     highResWavePath?: { x: number; y: number }[] // Used explicitly to draw a smooth curve for the backplane outline
@@ -348,8 +363,7 @@ export function generateCncLayout(
         let bpGroup: makerjs.IModel
         let bpHeightTotal: number
 
-        const slotW = backplaneParams.materialThickness
-        const slotH = backplaneParams.slotDepth
+        // Slot base geometry is now computed dynamically per ryb based on its rotation
 
         if (backplaneParams.shape === 'organic') {
             const maxRybHeight = Math.max(...rybProfiles.map(p => p.height))
@@ -370,9 +384,13 @@ export function generateCncLayout(
             let slotIdx = 0
             for (let i = 0; i < rybPositions.length; i++) {
                 const pos = rybPositions[i]
-                const slotModel = createSlotWithDogbone(slotW, slotH, backplaneParams.dogboneRadius)
-                if (pos.angle) {
-                    // rotate accepts degrees
+                const profile = rybProfiles[i]
+                const { w, h, shiftX } = computeProjectedSlotDimensions(profile, backplaneParams.materialThickness, backplaneParams.slotDepth)
+
+                const slotModel = createSlotWithDogbone(w, h, backplaneParams.dogboneRadius)
+                makerjs.model.move(slotModel, [shiftX, 0])
+
+                if (pos.angle !== undefined) {
                     makerjs.model.rotate(slotModel, pos.angle)
                 }
                 makerjs.model.move(slotModel, [pos.x, pos.y])
@@ -406,8 +424,13 @@ export function generateCncLayout(
             let slotIdx = 0
             for (let i = 0; i < rybPositions.length; i++) {
                 const pos = rybPositions[i]
-                const slotModel = createSlotWithDogbone(slotW, slotH, backplaneParams.dogboneRadius)
-                if (pos.angle) {
+                const profile = rybProfiles[i]
+                const { w, h, shiftX } = computeProjectedSlotDimensions(profile, backplaneParams.materialThickness, backplaneParams.slotDepth)
+
+                const slotModel = createSlotWithDogbone(w, h, backplaneParams.dogboneRadius)
+                makerjs.model.move(slotModel, [shiftX, 0])
+
+                if (pos.angle !== undefined) {
                     makerjs.model.rotate(slotModel, pos.angle)
                 }
 

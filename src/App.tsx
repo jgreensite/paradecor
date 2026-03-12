@@ -1505,11 +1505,12 @@ function App() {
       const sheetW = 1220
       const sheetH = 2440
       // Prepare ryb profiles
-      const rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[] }[] = []
+      const rybProfiles: { width: number; height: number; shape: string; freeformPts?: { x: number, y: number }[]; rotateX?: number; rotateY?: number; rotateZ?: number; thickness?: number }[] = []
       const rybPositions: { x: number; y: number; angle?: number }[] = []
       const wavePath = generateWavePath(lengthMM, waveHeightMM, params.waveHeight, params.waveFrequency, params.ribCount)
 
       const rybParams = generateAllRibParams(params, wavePath, freeformPoints, customRybSequence)
+      const rybThicknessMM = toMM(params.ribZ.physical) * params.ribZ.factor
 
       for (let i = 0; i < params.ribCount; i++) {
         const p = rybParams[i]
@@ -1517,7 +1518,11 @@ function App() {
           width: p.width,
           height: p.height,
           shape: p.shape,
-          freeformPts: p.freeformPts
+          freeformPts: p.freeformPts,
+          rotateX: p.rotateX,
+          rotateY: p.rotateY,
+          rotateZ: p.rotateZ,
+          thickness: rybThicknessMM
         })
         rybPositions.push({
           x: wavePath[i].x,
