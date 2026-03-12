@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
-import { OrbitControls, OrthographicCamera, ContactShadows, Float, GizmoHelper, GizmoViewport } from '@react-three/drei'
+import { OrbitControls, OrthographicCamera, ContactShadows, Float, GizmoHelper, GizmoViewport, Text } from '@react-three/drei'
 import * as THREE from 'three'
 import makerjs from 'makerjs'
 import { createSlotWithDogbone, createBackplaneOutline, generateCncLayout } from './backplane'
@@ -434,24 +434,43 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   return { geometries, positions, rotations, profiles }
 }
 
-function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled, shape, organicOffset, rybNodes }: { wavePath: { x: number, y: number, z: number }[], lengthMM: number, depthMM: number, materialThicknessMM: number, enabled: boolean, shape: 'rectangular' | 'organic', organicOffset: number, rybNodes: { x: number, h: number }[] }) {
+function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled, shape, organicOffset, slotLayouts }: { wavePath: { x: number, y: number, z: number }[], lengthMM: number, depthMM: number, materialThicknessMM: number, enabled: boolean, shape: 'rectangular' | 'organic', organicOffset: number, slotLayouts: { x: number, y: number, w: number, h: number, shiftX: number, rybH: number, rotateZ: number }[] }) {
   if (!enabled || wavePath.length < 2) return null
 
   const bpDepth = materialThicknessMM
 
   const getH = (x: number) => {
-    if (rybNodes.length === 0) return 0;
-    if (x <= rybNodes[0].x) return rybNodes[0].h;
-    if (x >= rybNodes[rybNodes.length - 1].x) return rybNodes[rybNodes.length - 1].h;
-    for (let i = 0; i < rybNodes.length - 1; i++) {
-      if (x >= rybNodes[i].x && x <= rybNodes[i + 1].x) {
-        const range = rybNodes[i + 1].x - rybNodes[i].x;
-        if (range === 0) return rybNodes[i].h;
-        return rybNodes[i].h + ((x - rybNodes[i].x) / range) * (rybNodes[i + 1].h - rybNodes[i].h);
+    if (slotLayouts.length === 0) return 0;
+    if (x <= slotLayouts[0].x) return slotLayouts[0].rybH;
+    if (x >= slotLayouts[slotLayouts.length - 1].x) return slotLayouts[slotLayouts.length - 1].rybH;
+    for (let i = 0; i < slotLayouts.length - 1; i++) {
+      if (x >= slotLayouts[i].x && x <= slotLayouts[i + 1].x) {
+        const range = slotLayouts[i + 1].x - slotLayouts[i].x;
+        if (range === 0) return slotLayouts[i].rybH;
+        return slotLayouts[i].rybH + ((x - slotLayouts[i].x) / range) * (slotLayouts[i + 1].rybH - slotLayouts[i].rybH);
       }
     }
-    return rybNodes[0].h;
+    return slotLayouts[0].rybH;
   }
+
+  const renderSlotOverlays = () => (
+    <group position={[0, 0, -depthMM * 0.6 + bpDepth / 2 + 0.1]}>
+      {slotLayouts.map((slot, i) => (
+        <group key={i} position={[slot.x, slot.y, 0]}>
+          <group rotation={[0, 0, slot.rotateZ * Math.PI / 180]}>
+            <mesh position={[slot.shiftX, 0, 0]}>
+              <planeGeometry args={[slot.w, slot.h]} />
+              <meshBasicMaterial color="#FF3333" opacity={0.65} transparent depthWrite={false} side={THREE.DoubleSide} />
+            </mesh>
+          </group>
+          {/* Label positioned above the theoretical slot bounds */}
+          <Text position={[0, slot.h / 2 + 10 + Math.abs(slot.w * Math.sin(slot.rotateZ * Math.PI / 180)), 0]} fontSize={8} color="#FFFFFF" outlineWidth={0.5} outlineColor="#000000" anchorX="center" anchorY="bottom">
+            {`${slot.w.toFixed(1)} × ${slot.h.toFixed(1)}`}
+          </Text>
+        </group>
+      ))}
+    </group>
+  )
 
   if (shape === 'organic') {
     // Generate a shape that follows the wave path at both top and bottom to create a 'ribbon'
@@ -478,6 +497,7 @@ function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled
           <extrudeGeometry args={[fullShape, { depth: bpDepth, bevelEnabled: false }]} />
           <meshStandardMaterial color="#8B7355" roughness={0.7} metalness={0.05} />
         </mesh>
+        {renderSlotOverlays()}
       </group>
     )
   }
@@ -491,10 +511,11 @@ function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled
 
   return (
     <group>
-      <mesh position={[centerX, centerY, -depthMM * 0.6]} castShadow receiveShadow>
+      <mesh position={[centerX, centerY, -depthMM * 0.6 + bpDepth / 2]} castShadow receiveShadow>
         <boxGeometry args={[lengthMM * 1.05, bpHeight, bpDepth]} />
         <meshStandardMaterial color="#8B7355" roughness={0.7} metalness={0.05} />
       </mesh>
+      {renderSlotOverlays()}
     </group>
   )
 }
@@ -655,15 +676,23 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
 
   const { geometries, positions, rotations, profiles } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
 
-  const rybNodes = useMemo(() => {
+  const slotLayouts = useMemo(() => {
     return positions.map((pos, i) => {
       const p = profiles[i]
       const Rx = (p.rotateX || 0) * Math.PI / 180
+      const Ry = (p.rotateY ?? -90) * Math.PI / 180
       const tz = params.ribZ.physical.value * params.ribZ.factor
-      const h = p.height * Math.abs(Math.cos(Rx)) + tz * Math.abs(Math.sin(Rx))
-      return { x: pos.x, h }
+      const tw = params.backplaneMaterialThickness
+      const th = params.backplaneSlotDepth
+
+      const w = tw * Math.abs(Math.cos(Ry)) + th * Math.abs(Math.sin(Rx) * Math.sin(Ry)) + tz * Math.abs(Math.cos(Rx) * Math.sin(Ry))
+      const h = th * Math.abs(Math.cos(Rx)) + tz * Math.abs(Math.sin(Rx))
+      const shiftX = (-tw / 2) * Math.cos(Ry)
+      const rybH = p.height * Math.abs(Math.cos(Rx)) + tz * Math.abs(Math.sin(Rx))
+
+      return { x: pos.x, y: pos.y, w, h, shiftX, rybH, rotateZ: p.rotateZ || 0 }
     })
-  }, [positions, profiles, params.ribZ.physical.value, params.ribZ.factor])
+  }, [positions, profiles, params.ribZ.physical.value, params.ribZ.factor, params.backplaneMaterialThickness, params.backplaneSlotDepth])
 
   useEffect(() => {
     return () => {
@@ -698,7 +727,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
         enabled={params.backplaneEnabled}
         shape={params.backplaneShape}
         organicOffset={params.backplaneOrganicOffset}
-        rybNodes={rybNodes}
+        slotLayouts={slotLayouts}
       />
     </group>
   )
