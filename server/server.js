@@ -66,9 +66,16 @@ app.post('/api/create-checkout-session', async (req, res) => {
       success_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/#designer`,
       metadata: {
-        // We will store the full params JSON string here when we get to it, 
-        // to attach it to the order for fulfillment.
-        ribCount: params.ribCount.toString(),
+        // Stripe metadata max is 500 chars per key. If params is huge, this might fail.
+        // For a full order system, we should save the order to a DB *FIRST* with status 'pending',
+        // and just pass the orderId in the metadata.
+        // For now, we will store a simplified stringified version of core params.
+        shelfParams: JSON.stringify({
+          ribCount: params.ribCount,
+          material: params.material,
+          width: params.length.value,
+          height: params.height.value
+        }),
       },
     });
 
