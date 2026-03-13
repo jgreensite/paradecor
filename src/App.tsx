@@ -1472,6 +1472,7 @@ function App() {
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
   const [customRybSequence, setCustomRybSequence] = useState<CustomRybSequence | null>(null)
   const [isExporting, setIsExporting] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const [cyclingRybIndex, setCyclingRybIndex] = useState(0)
   const [cyclingFadeIn, setCyclingFadeIn] = useState(true)
   const [expandedRibEditor, setExpandedRibEditor] = useState(false)
@@ -1553,6 +1554,28 @@ function App() {
       handleParamChange('waveHeight', preset.params.waveHeight)
       handleParamChange('waveFrequency', preset.params.waveFrequency)
       handleParamChange('ribCount', preset.params.ribCount)
+    }
+  }
+
+  const handleStripeCheckout = async () => {
+    setIsRedirecting(true)
+    try {
+      const response = await fetch('http://localhost:3001/api/create-checkout-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ params, price: totalPrice })
+      })
+      const data = await response.json()
+      
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        console.error('No Checkout URL returned:', data)
+      }
+    } catch (error) {
+      console.error('Checkout error:', error)
+    } finally {
+      setIsRedirecting(false)
     }
   }
 
@@ -1999,7 +2022,9 @@ function App() {
               </div>
               {user ? (
                 isAdmin ? (
-                  <button className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors" onClick={() => setShowExport(true)}>Export & Order</button>
+                  <button disabled={isRedirecting} className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors disabled:opacity-50" onClick={handleStripeCheckout}>
+                    {isRedirecting ? 'Redirecting...' : 'Export & Order'}
+                  </button>
                 ) : (
                   <button disabled className="w-full py-3 bg-stone/20 text-stone font-medium rounded-lg cursor-not-allowed">Admin access required to export</button>
                 )
