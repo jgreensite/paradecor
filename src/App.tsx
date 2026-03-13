@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera, ContactShadows, Float, GizmoHelper, GizmoViewport, Text } from '@react-three/drei'
+import { SignInButton, UserButton, useUser } from '@clerk/react'
 import * as THREE from 'three'
 import makerjs from 'makerjs'
 import { createSlotWithDogbone, createBackplaneOutline, generateCncLayout } from './backplane'
@@ -1406,6 +1407,8 @@ function DeveloperConfig({ config, onChange }: { config: typeof INITIAL_SITE_CON
 }
 
 function App() {
+  const { user } = useUser()
+  const isAdmin = user?.publicMetadata?.role === 'admin'
   const [siteConfig, setSiteConfig] = useState(INITIAL_SITE_CONFIG)
   const [globalUnit, setGlobalUnit] = useState<Unit>('mm')
 
@@ -1659,8 +1662,18 @@ function App() {
           </div>
           <div className="hidden md:flex items-center gap-8">
             <button onClick={() => setActiveSection('design')} className={`text-sm tracking-wide transition-colors ${activeSection === 'design' ? 'text-charcoal' : 'text-warm-gray hover:text-stone'}`}>Designer</button>
-            <button onClick={() => setShowExport(true)} className="text-sm tracking-wide text-oak hover:text-charcoal transition-colors">Export</button>
-            <button className="btn-primary text-sm py-3 px-6">Get Started</button>
+            {user ? (
+              <>
+                {isAdmin && (
+                  <button onClick={() => setShowExport(true)} className="text-sm tracking-wide text-oak hover:text-charcoal transition-colors">Export</button>
+                )}
+                <UserButton />
+              </>
+            ) : (
+              <SignInButton mode="modal">
+                <button className="btn-primary text-sm py-2 px-5">Sign In</button>
+              </SignInButton>
+            )}
           </div>
         </div>
       </nav>
@@ -1984,7 +1997,17 @@ function App() {
                 <p className="font-display text-4xl mb-1">${totalPrice}</p>
                 <p className="text-cream/50 text-sm">{params.length.value}{params.length.unit} × {params.height.value}{params.height.unit} • {params.ribCount} {params.ribShape} rybs</p>
               </div>
-              <button className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors" onClick={() => setShowExport(true)}>Export & Order</button>
+              {user ? (
+                isAdmin ? (
+                  <button className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors" onClick={() => setShowExport(true)}>Export & Order</button>
+                ) : (
+                  <button disabled className="w-full py-3 bg-stone/20 text-stone font-medium rounded-lg cursor-not-allowed">Admin access required to export</button>
+                )
+              ) : (
+                <SignInButton mode="modal" fallbackRedirectUrl="/">
+                  <button className="w-full py-3 bg-charcoal text-cream font-medium border border-cream/20 rounded-lg hover:bg-stone transition-colors">Sign in to Export</button>
+                </SignInButton>
+              )}
             </div>
           </div>
         </section>
