@@ -4,10 +4,10 @@ import { ClerkProvider } from '@clerk/react'
 import './index.css'
 import App from './App.tsx'
 
-const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || 'pk_test_ZHVtbXkua2V5LmNsZXJrLmRldiQ='
 
-if (!PUBLISHABLE_KEY) {
-  throw new Error('Missing Publishable Key')
+if (!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY) {
+  console.warn('Missing VITE_CLERK_PUBLISHABLE_KEY. Using fallback dummy key. Authentication will not work.')
 }
 
 createRoot(document.getElementById('root')!).render(
