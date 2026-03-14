@@ -209,9 +209,6 @@ function generateRibGeometry(
   widthMM: number,
   heightMM: number,
   depthMM: number,
-  rotX: number,
-  rotY: number,
-  rotZ: number,
   flatEdge: boolean,
   freeformPoints?: FreeformRibPoint[]
 ): THREE.BufferGeometry {
@@ -219,8 +216,6 @@ function generateRibGeometry(
   const vertices: number[] = []
   const indices: number[] = []
   const normals: number[] = []
-
-  const thickness = flatEdge ? 0 : depthMM / 2
 
   if (shape === 'square' || shape === 'rectangle') {
     const w = widthMM / 2
@@ -336,17 +331,15 @@ function generateRibGeometry(
       const base = sideStart + i * 4
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
     }
+  } else {
+    // Return empty geometry if no valid shape parameters to avoid crash
+    return geometry;
   }
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
   geometry.setIndex(indices)
   geometry.computeVertexNormals()
-
-  const euler = new THREE.Euler(THREE.MathUtils.degToRad(rotX), THREE.MathUtils.degToRad(rotY), THREE.MathUtils.degToRad(rotZ))
-  geometry.rotateX(euler.x)
-  geometry.rotateY(euler.y)
-  geometry.rotateZ(euler.z)
 
   return geometry
 }
@@ -361,6 +354,9 @@ function generateAllRibParams(params: ShelfParams, wavePath: { x: number, y: num
 
   const profiles: { width: number; height: number; shape: RibShape; freeformPts?: FreeformRibPoint[], rotateX: number, rotateY: number, rotateZ: number }[] = []
 
+  // Pre-calculate points for all keyframes in the sequence to avoid redundant math in the loop
+  const keyframePoints = customRybSequence?.rybs.map(ryb => getAllPointsFromRyb(ryb)) || []
+
   for (let i = 0; i < wavePath.length; i++) {
     const t = i / (wavePath.length - 1 || 1)
     const transform = interpolateTransform(activeTransforms, t)
@@ -369,27 +365,35 @@ function generateAllRibParams(params: ShelfParams, wavePath: { x: number, y: num
     const scaledHeight = baseY * transform.scaleY
 
     let ribFreeformPoints = freeformPoints
-    if (customRybSequence && customRybSequence.rybs.length > 1 && params.ribShape === 'freeform') {
-      const rybCount = customRybSequence.rybs.length
-      const rybT = t * (rybCount - 1)
-      const rybIdx0 = Math.min(Math.floor(rybT), rybCount - 1)
-      const rybIdx1 = Math.min(rybIdx0 + 1, rybCount - 1)
-      const localT = rybT - rybIdx0
 
-      const points0 = getAllPointsFromRyb(customRybSequence.rybs[rybIdx0])
-      const points1 = getAllPointsFromRyb(customRybSequence.rybs[rybIdx1])
+    // Priority: If we have a custom sequence and the shape is freeform, use it regardless of length
+    if (params.ribShape === 'freeform' && keyframePoints.length > 0) {
+      const rybCount = keyframePoints.length
+      
+      if (rybCount === 1) {
+        // Single keyframe: no interpolation needed, just scale it
+        ribFreeformPoints = keyframePoints[0].map(p => ({ x: p.x * 2, y: p.y * 2 }))
+      } else {
+        const rybT = t * (rybCount - 1)
+        const rybIdx0 = Math.min(Math.floor(rybT), rybCount - 2)
+        const rybIdx1 = rybIdx0 + 1
+        const localT = rybT - rybIdx0
 
-      const maxLen = Math.max(points0.length, points1.length)
-      const interpolatedPoints: FreeformRibPoint[] = []
-      for (let j = 0; j < maxLen; j++) {
-        const p0 = points0[Math.min(j, points0.length - 1)]
-        const p1 = points1[Math.min(j, points1.length - 1)]
-        interpolatedPoints.push({
-          x: (p0.x + (p1.x - p0.x) * localT) * 2,
-          y: (p0.y + (p1.y - p0.y) * localT) * 2
-        })
+        const points0 = keyframePoints[rybIdx0]
+        const points1 = keyframePoints[rybIdx1]
+
+        const maxLen = Math.max(points0.length, points1.length)
+        const interpolatedPoints: FreeformRibPoint[] = []
+        for (let j = 0; j < maxLen; j++) {
+          const p0 = points0[Math.min(j, points0.length - 1)]
+          const p1 = points1[Math.min(j, points1.length - 1)]
+          interpolatedPoints.push({
+            x: (p0.x + (p1.x - p0.x) * localT) * 2,
+            y: (p0.y + (p1.y - p0.y) * localT) * 2
+          })
+        }
+        ribFreeformPoints = interpolatedPoints
       }
-      ribFreeformPoints = interpolatedPoints
     }
 
     profiles.push({
@@ -406,33 +410,29 @@ function generateAllRibParams(params: ShelfParams, wavePath: { x: number, y: num
   return profiles
 }
 
-function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null): { geometries: THREE.BufferGeometry[], positions: { x: number, y: number, z: number }[], rotations: number[], profiles: any[] } {
+function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null): { positions: { x: number, y: number, z: number }[], rotations: [number, number, number][], profiles: any[] } {
   const lengthMM = toMM(params.length)
   const waveHeightMM = toMM(params.height)
-  const baseZ = toMM(params.ribZ.physical) * params.ribZ.factor
 
   const wavePath = generateWavePath(lengthMM, waveHeightMM, params.waveHeight, params.waveFrequency, params.ribCount)
   const profiles = generateAllRibParams(params, wavePath, freeformPoints, customRybSequence)
 
-  const geometries: THREE.BufferGeometry[] = []
   const positions: { x: number, y: number, z: number }[] = []
-  const rotations: number[] = []
+  const rotations: [number, number, number][] = []
 
   for (let i = 0; i < wavePath.length; i++) {
     const point = wavePath[i]
     const p = profiles[i]
 
-    const geometry = generateRibGeometry(
-      p.shape, p.width, p.height, baseZ,
-      p.rotateX, p.rotateY, p.rotateZ,
-      params.flatEdge, p.freeformPts
-    )
-    geometries.push(geometry)
     positions.push({ x: point.x, y: point.y, z: 0 })
-    rotations.push(0)
+    rotations.push([
+      THREE.MathUtils.degToRad(p.rotateX),
+      THREE.MathUtils.degToRad(p.rotateY),
+      THREE.MathUtils.degToRad(p.rotateZ)
+    ])
   }
 
-  return { geometries, positions, rotations, profiles }
+  return { positions, rotations, profiles }
 }
 
 function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled, shape, organicOffset, slotLayouts }: { wavePath: { x: number, y: number, z: number }[], lengthMM: number, depthMM: number, materialThicknessMM: number, enabled: boolean, shape: 'rectangular' | 'organic', organicOffset: number, slotLayouts: { x: number, y: number, w: number, h: number, shiftX: number, rybH: number, rotateZ: number }[] }) {
@@ -646,14 +646,25 @@ function CameraSweep({ enabled = true, siteConfig }: { enabled?: boolean, siteCo
   return null
 }
 
-function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[] }) {
+function SingleRibPreview({ params, freeformPoints, customRybSequence }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null }) {
   const widthMM = toMM(params.ribX.physical) * params.ribX.factor
   const heightMM = toMM(params.ribY.physical) * params.ribY.factor
   const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
 
+  // Sync with the selected keyframe in the custom sequence if it exists
+  const activeFreeformPoints = useMemo(() => {
+    if (params.ribShape === 'freeform' && customRybSequence && customRybSequence.rybs.length > 0) {
+      const selectedRyb = customRybSequence.rybs[customRybSequence.selectedIndex || 0]
+      if (selectedRyb) {
+        return getAllPointsFromRyb(selectedRyb).map(p => ({ x: p.x * 2, y: p.y * 2 }))
+      }
+    }
+    return freeformPoints
+  }, [params.ribShape, freeformPoints, customRybSequence])
+
   const geometry = useMemo(() =>
-    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints),
-    [params.ribShape, widthMM, heightMM, depthMM, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, freeformPoints]
+    generateRibGeometry(params.ribShape, widthMM, heightMM, depthMM, params.flatEdge, activeFreeformPoints),
+    [params.ribShape, widthMM, heightMM, depthMM, params.flatEdge, activeFreeformPoints]
   )
 
   const material = useMemo(() => {
@@ -661,21 +672,43 @@ function SingleRibPreview({ params, freeformPoints }: { params: ShelfParams, fre
     return new THREE.MeshStandardMaterial({ color: mat.color, roughness: mat.roughness, metalness: 0.05, side: THREE.DoubleSide })
   }, [params.material])
 
-  return <mesh geometry={geometry} material={material} castShadow receiveShadow />
+  const rotation: [number, number, number] = [
+    THREE.MathUtils.degToRad(params.ribRotateX),
+    THREE.MathUtils.degToRad(params.ribRotateY),
+    THREE.MathUtils.degToRad(params.ribRotateZ)
+  ]
+
+  return <mesh geometry={geometry} material={material} rotation={rotation} castShadow receiveShadow />
 }
 
 function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }: { params: ShelfParams, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null, highlightIndex?: number }) {
-  const groupRef = useRef<THREE.Group>(null)
-  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null)
-
   const selectedMaterial = MATERIALS.find(m => m.id === params.material) || MATERIALS[0]
+  const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
 
   const memoKey = useMemo(() =>
     `${params.length.value}-${params.length.unit}-${params.height.value}-${params.height.unit}-${params.ribDepth.value}-${params.ribCount}-${params.waveHeight}-${params.waveFrequency}-${params.ribShape}-${params.ribX.physical.value}-${params.ribX.factor}-${params.ribY.physical.value}-${params.ribY.factor}-${params.ribZ.physical.value}-${params.ribZ.factor}-${params.ribRotateX}-${params.ribRotateY}-${params.ribRotateZ}-${params.flatEdge}-${params.sizeTransforms.map(t => `${t.scaleX}-${t.scaleY}`).join(',')}`,
     [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, params.sizeTransforms]
   )
 
-  const { geometries, positions, rotations, profiles } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
+  const { positions, rotations, profiles } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
+
+  // Optimize: Use templates for non-freeform shapes to avoid 200+ unique geometries
+  const geometries = useMemo(() => {
+    if (params.ribShape !== 'freeform') {
+      // Create a small number of template geometries based on size transforms if they are active
+      // For now, we'll generate the unique geometries but at least they aren't rotated in memory
+      return positions.map((_, i) => {
+        const p = profiles[i]
+        return generateRibGeometry(p.shape, p.width, p.height, depthMM, params.flatEdge, p.freeformPts)
+      })
+    } else {
+      // Freeform always needs unique geometries due to point interpolation
+      return positions.map((_, i) => {
+        const p = profiles[i]
+        return generateRibGeometry(p.shape, p.width, p.height, depthMM, params.flatEdge, p.freeformPts)
+      })
+    }
+  }, [positions, profiles, depthMM, params.flatEdge, params.ribShape])
 
   const slotLayouts = useMemo(() => {
     return positions.map((pos, i) => {
@@ -698,14 +731,11 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
   useEffect(() => {
     return () => {
       geometries.forEach(geometry => geometry.dispose())
-      if (materialRef.current) materialRef.current.dispose()
     }
   }, [geometries])
 
   const material = useMemo(() => {
-    const mat = new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
-    materialRef.current = mat
-    return mat
+    return new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
   }, [selectedMaterial])
 
   const highlightMaterial = useMemo(() => {
@@ -713,17 +743,25 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
   }, [])
 
   const lengthMM = toMM(params.length)
-  const depthMM = toMM(params.ribDepth)
+  const ribDepthMM = toMM(params.ribDepth)
 
   return (
-    <group ref={groupRef}>
+    <group>
       {geometries.map((geometry, index) => (
-        <mesh key={index} geometry={geometry} material={highlightIndex === index ? highlightMaterial : material} position={[positions[index].x, positions[index].y, positions[index].z]} castShadow receiveShadow />
+        <mesh
+          key={index}
+          geometry={geometry}
+          material={highlightIndex === index ? highlightMaterial : material}
+          position={[positions[index].x, positions[index].y, positions[index].z]}
+          rotation={rotations[index]}
+          castShadow
+          receiveShadow
+        />
       ))}
       <Backplane3D
         wavePath={positions}
         lengthMM={lengthMM}
-        depthMM={depthMM}
+        depthMM={ribDepthMM}
         materialThicknessMM={params.backplaneMaterialThickness}
         enabled={params.backplaneEnabled}
         shape={params.backplaneShape}
@@ -753,7 +791,7 @@ function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRi
       <pointLight position={[0, 0, 30]} intensity={0.5} />
 
       <Float speed={isSingleRib ? 2 : 1} rotationIntensity={viewMode === '3d' && !isSingleRib ? 0.1 : 0} floatIntensity={0.3}>
-        {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />}
+        {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />}
       </Float>
 
       <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} siteConfig={siteConfig} isSingleRib={isSingleRib} isPreview={isPreview} />
@@ -1723,7 +1761,7 @@ function App() {
               <div className="absolute top-4 right-4 animate-in fade-in slide-in-from-top-4 duration-1000">
                 <div className="w-36 h-36 bg-cream/90 backdrop-blur-md rounded-xl overflow-hidden border-2 border-charcoal/10 shadow-2xl">
                   <Canvas shadows camera={{ position: [20, 15, 25], fov: 35, near: 0.1, far: 5000 }} style={{ opacity: cyclingFadeIn ? 1 : 0, transition: `opacity ${siteConfig.previewFadeDurationMs}ms ease-in-out` }} className="w-full h-full">
-                    <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} isSingleRib={true} canvasId="mini-single-canvas" autoSweep enableOrbit={false} siteConfig={siteConfig} showGizmo={false} isPreview={true} />
+                    <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="mini-single-canvas" autoSweep enableOrbit={false} siteConfig={siteConfig} showGizmo={false} isPreview={true} />
                   </Canvas>
                 </div>
               </div>
