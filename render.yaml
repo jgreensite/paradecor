@@ -18,14 +18,14 @@ services:
         sync: false
       - key: CLIENT_URL
         fromService:
-          type: static
+          type: web # Updated to match the frontend's new type
           name: rybform-frontend
-          property: url
+          envVarKey: RENDER_EXTERNAL_URL # Pulls the actual URL
 
   # Frontend Static Site
-  - type: static
+  - type: web # Changed from 'static'
+    env: static # Defines the runtime as a static site
     name: rybform-frontend
-    plan: free
     buildCommand: npm install && npm run build
     publishDir: dist
     envVars:
@@ -35,4 +35,4 @@ services:
         fromService:
           type: web
           name: rybform-backend
-          property: url
+          envVarKey: RENDER_EXTERNAL_URL # Pulls the actual URL
