@@ -24,10 +24,10 @@ services:
 
   # Frontend Static Site
   - type: web # Changed from 'static'
-    env: static # Defines the runtime as a static site
+    runtime: static # Defines the runtime as a static site
     name: rybform-frontend
     buildCommand: npm install && npm run build
-    publishDir: dist
+    staticPublishPath: dist
     envVars:
       - key: VITE_CLERK_PUBLISHABLE_KEY
         sync: false
