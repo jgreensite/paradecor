@@ -23,9 +23,8 @@ services:
           property: url
 
   # Frontend Static Site
-  - type: static_site
+  - type: static
     name: rybform-frontend
-    env: static
     plan: free
     buildCommand: npm install && npm run build
     publishDir: dist
