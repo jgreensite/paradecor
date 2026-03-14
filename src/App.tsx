@@ -420,11 +420,16 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   const positions: { x: number, y: number, z: number }[] = []
   const rotations: [number, number, number][] = []
 
+  // Center the shelf by calculating the wavePath span
+  const minX = Math.min(...wavePath.map(p => p.x))
+  const maxX = Math.max(...wavePath.map(p => p.x))
+  const midX = (minX + maxX) / 2
+
   for (let i = 0; i < wavePath.length; i++) {
     const point = wavePath[i]
     const p = profiles[i]
 
-    positions.push({ x: point.x, y: point.y, z: 0 })
+    positions.push({ x: point.x - midX, y: point.y, z: 0 })
     rotations.push([
       THREE.MathUtils.degToRad(p.rotateX),
       THREE.MathUtils.degToRad(p.rotateY),
@@ -576,13 +581,17 @@ function ZoomToFit({ boundingBox, viewMode, target, siteConfig, isSingleRib = fa
   useFrame(() => {
     if (viewMode !== '3d' || !needsPositionRef.current) return
     const bb = boundingBoxRef.current
-    const maxDim = Math.max(bb.width, bb.height, bb.depth)
-    if (maxDim <= 0) return // Bounding box not computed yet, wait for next frame
+    const maxDim = Math.max(bb.width, bb.height, bb.depth) || 800
     const center = target || bb.center || new THREE.Vector3(0, 0, 0)
-    const zoomMult = isPreview ? 1.8 : (isSingleRib ? 1.5 : siteConfig.perspectiveZoomMultiplier)
+    
+    // Safety check: if maxDim is too small, wait or scale up
+    if (maxDim < 1) return
+
+    const zoomMult = isPreview ? 1.8 : (isSingleRib ? 1.5 : siteConfig.perspectiveZoomMultiplier || 1.1)
     const distance = maxDim * zoomMult
     camera.position.set(center.x + distance * 0.5, center.y + distance * 0.4, center.z + distance * 0.8)
     camera.lookAt(center)
+    camera.updateProjectionMatrix()
     needsPositionRef.current = false
   })
 
@@ -710,6 +719,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
     }
   }, [positions, profiles, depthMM, params.flatEdge, params.ribShape])
 
+
   const slotLayouts = useMemo(() => {
     return positions.map((pos, i) => {
       const p = profiles[i]
@@ -728,18 +738,25 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
     })
   }, [positions, profiles, params.ribZ.physical.value, params.ribZ.factor, params.backplaneMaterialThickness, params.backplaneSlotDepth])
 
-  useEffect(() => {
-    return () => {
-      geometries.forEach(geometry => geometry.dispose())
-    }
-  }, [geometries])
-
+  // Simplest material to ensure visibility
   const material = useMemo(() => {
-    return new THREE.MeshStandardMaterial({ color: selectedMaterial.color, roughness: selectedMaterial.roughness, metalness: 0.05, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
+    return new THREE.MeshStandardMaterial({ 
+      color: selectedMaterial.color, 
+      roughness: 0.7, 
+      metalness: 0.1, 
+      side: THREE.DoubleSide
+    })
   }, [selectedMaterial])
 
   const highlightMaterial = useMemo(() => {
-    return new THREE.MeshStandardMaterial({ color: '#C67B5C', roughness: 0.4, metalness: 0.1, emissive: '#C67B5C', emissiveIntensity: 0.3, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })
+    return new THREE.MeshStandardMaterial({ 
+      color: '#C67B5C', 
+      roughness: 0.4, 
+      metalness: 0.1, 
+      emissive: '#C67B5C', 
+      emissiveIntensity: 0.3, 
+      side: THREE.DoubleSide
+    })
   }, [])
 
   const lengthMM = toMM(params.length)
@@ -788,16 +805,23 @@ function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRi
       <ambientLight intensity={0.8} />
       <directionalLight position={[20, 30, 20]} intensity={1.5} castShadow />
       <directionalLight position={[-10, 10, -10]} intensity={0.3} />
-      <pointLight position={[0, 0, 30]} intensity={0.5} />
 
       <Float speed={isSingleRib ? 2 : 1} rotationIntensity={viewMode === '3d' && !isSingleRib ? 0.1 : 0} floatIntensity={0.3}>
-        {isSingleRib ? <SingleRibPreview params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} /> : <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />}
+        {isSingleRib ? (
+          <SingleRibPreview params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} />
+        ) : (
+          <group frustumCulled={false}>
+            <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />
+            {/* Debug axes to see where the center is */}
+            <axesHelper args={[500]} />
+          </group>
+        )}
       </Float>
 
       <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} siteConfig={siteConfig} isSingleRib={isSingleRib} isPreview={isPreview} />
       {autoSweep && viewMode === '3d' && <CameraSweep siteConfig={siteConfig} />}
 
-      <ContactShadows position={[0, -heightMM / 2 - 15, 0]} opacity={0.4} scale={Math.max(lengthMM, 100)} blur={2} far={50} />
+      <ContactShadows position={[0, -heightMM / 2 - 2, 0]} opacity={0.4} scale={Math.max(lengthMM, 200)} blur={1} far={100} />
 
       {enableOrbit && viewMode === '3d' && <OrbitControls enablePan enableZoom enableDamping dampingFactor={0.05} minDistance={20} maxDistance={2000} makeDefault />}
       {showGizmo && (
