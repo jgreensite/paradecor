@@ -42,6 +42,11 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (request, re
 // Middleware for normal JSON endpoints (must come AFTER webhook)
 app.use(express.json());
 
+// Basic health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Rybform Server Running' });
+});
+
 // Endpoint to create Stripe Checkout Session
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
@@ -87,6 +92,10 @@ app.post('/api/create-checkout-session', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+export default app;
