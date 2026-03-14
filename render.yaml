@@ -28,6 +28,10 @@ services:
     name: rybform-frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
+    headers:
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.rybform.com; connect-src 'self' https://*.clerk.accounts.dev https://clerk.rybform.com https://api.stripe.com; worker-src 'self' blob:; img-src 'self' data: blob: https://*.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
     envVars:
       - key: VITE_CLERK_PUBLISHABLE_KEY
         sync: false
