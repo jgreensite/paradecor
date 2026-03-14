@@ -19,7 +19,7 @@ services:
           property: url
 
   # Frontend Static Site
-  - type: static
+  - type: static_site
     name: rybform-frontend
     env: static
     plan: free
