@@ -1,8 +1,35 @@
 services:
-  - type: static
-    name: paradecor
-    buildCommand: npm run build
-    outputDir: dist
+  # Backend Web Service
+  - type: web
+    name: rybform-backend
+    env: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
     envVars:
-      - key: NODE_VERSION
-        value: "20"
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: CLIENT_URL
+        fromService:
+          type: static
+          name: rybform-frontend
+          property: url
+
+  # Frontend Static Site
+  - type: static
+    name: rybform-frontend
+    env: static
+    plan: free
+    buildCommand: npm install && npm run build
+    publishDir: dist
+    envVars:
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_API_URL
+        fromService:
+          type: web
+          name: rybform-backend
+          property: url
