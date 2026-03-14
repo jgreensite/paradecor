@@ -2,17 +2,22 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import Stripe from 'stripe';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
 const app = express();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // Middleware
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
 // --- Webhook Endpoint ---
 // Stripe requires the raw body to verify the signature
-app.post('/api/webhook', express.raw({ type: 'application/json' }), (request, response) => {
+app.post('/api/webhook', express.raw({ type: 'application/json' }), async (request, response) => {
   const sig = request.headers['stripe-signature'];
   let event;
 
@@ -24,12 +29,25 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), (request, re
   }
 
   // Handle the event
+  // Handle the event
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
       console.log(`Payment successful for session ${session.id}!`);
-      console.log('Order metadata:', session.metadata);
-      // Here we would eventually save the order to Supabase (EPIC-14)
+      
+      const orderId = session.metadata.orderId;
+      if (orderId) {
+        const { error } = await supabase
+          .from('orders')
+          .update({ status: 'paid', stripe_session_id: session.id })
+          .eq('id', orderId);
+        
+        if (error) {
+          console.error(`Error updating order ${orderId}: ${error.message}`);
+        } else {
+          console.log(`Order ${orderId} marked as paid.`);
+        }
+      }
       break;
     }
     default:
@@ -50,8 +68,26 @@ app.get('/health', (req, res) => {
 // Endpoint to create Stripe Checkout Session
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
-    const { params, price } = req.body;
+    const { params, price, userEmail } = req.body;
 
+    // 1. Create a pending order in Supabase
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .insert([
+        {
+          user_email: userEmail,
+          params: params,
+          total_price: price,
+          status: 'pending',
+          currency: 'usd'
+        }
+      ])
+      .select()
+      .single();
+
+    if (orderError) throw new Error(`Supabase Order Error: ${orderError.message}`);
+
+    // 2. Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       line_items: [
@@ -71,16 +107,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       success_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.CLIENT_URL || 'http://localhost:5173'}/#designer`,
       metadata: {
-        // Stripe metadata max is 500 chars per key. If params is huge, this might fail.
-        // For a full order system, we should save the order to a DB *FIRST* with status 'pending',
-        // and just pass the orderId in the metadata.
-        // For now, we will store a simplified stringified version of core params.
-        shelfParams: JSON.stringify({
-          ribCount: params.ribCount,
-          material: params.material,
-          width: params.length.value,
-          height: params.height.value
-        }),
+        orderId: order.id,
       },
     });
 

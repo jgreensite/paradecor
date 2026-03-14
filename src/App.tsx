@@ -1557,6 +1557,8 @@ function App() {
     }
   }
 
+  const userEmail = user?.primaryEmailAddress?.emailAddress
+
   const handleStripeCheckout = async () => {
     setIsRedirecting(true)
     try {
@@ -1564,7 +1566,7 @@ function App() {
       const response = await fetch(`${apiUrl}/api/create-checkout-session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ params, price: totalPrice })
+        body: JSON.stringify({ params, price: totalPrice, userEmail })
       })
       const data = await response.json()
       
