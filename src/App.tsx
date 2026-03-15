@@ -562,36 +562,20 @@ function ZoomToFit({ boundingBox, viewMode, target, siteConfig, isSingleRib = fa
   const boundingBoxRef = useRef(boundingBox)
   boundingBoxRef.current = boundingBox
 
-  // 3D perspective: use useFrame to position camera on first valid frame and on viewMode transitions
-  // This avoids setTimeout races — it fires as soon as the bounding box is valid
-  const needsPositionRef = useRef(true)
-  const lastViewModeRef = useRef<ViewMode>(viewMode)
+  // Reposition camera in 3D mode whenever bounding box changes or viewMode switches to 3d
+  useEffect(() => {
+    if (viewMode !== '3d') return
+    const bb = boundingBox
+    const maxDim = Math.max(bb.width, bb.height, bb.depth)
+    if (maxDim < 1) return
 
-  // Detect viewMode changes to trigger re-positioning
-  if (lastViewModeRef.current !== viewMode) {
-    if (viewMode === '3d') needsPositionRef.current = true
-    lastViewModeRef.current = viewMode
-  }
-
-  useFrame(() => {
-    if (viewMode !== '3d' || !needsPositionRef.current) return
-    const bb = boundingBoxRef.current
-    const rawMax = Math.max(bb.width, bb.height, bb.depth)
-    // Wait for a valid bounding box (not placeholder/0)
-    if (rawMax < 1) return
-
-    const maxDim = rawMax
     const center = target || bb.center || new THREE.Vector3(0, 0, 0)
-    
     const zoomMult = isPreview ? 1.8 : (isSingleRib ? 1.5 : siteConfig.perspectiveZoomMultiplier || 1.1)
     const distance = maxDim * zoomMult
-    // For shelf view: look from slightly elevated front view so ribs are visible
-    // Ribs face along X axis (ribRotateY=-90), so camera at +X, +Y, +Z sees them face-on
     camera.position.set(center.x + distance * 0.3, center.y + distance * 0.5, center.z + distance)
     camera.lookAt(center)
     camera.updateProjectionMatrix()
-    needsPositionRef.current = false
-  })
+  }, [boundingBox.width, boundingBox.height, boundingBox.depth, viewMode, isSingleRib, isPreview])
 
   // Orthographic views: always recalculate (deterministic viewpoints)
   useEffect(() => {
