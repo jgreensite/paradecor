@@ -14,7 +14,7 @@
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=()" />
     
     <!-- Content Security Policy -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-src 'none';" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://js.stripe.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://api.stripe.com wss://*.clerk.dev; worker-src 'self' blob:; img-src 'self' data: blob: https://*.stripe.com https://img.clerk.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com; object-src 'none';" />
     
     <title>Rybform | Parametric Ryb-Based Furniture Design</title>
     <meta name="description" content="Design your own parametric rib-based furniture with algorithm-driven precision. Custom CNC-cut wooden shelves delivered to your door." />

@@ -23,15 +23,14 @@ services:
           envVarKey: RENDER_EXTERNAL_URL # Pulls the actual URL
 
   # Frontend Static Site
-  - type: web # Changed from 'static'
-    runtime: static # Defines the runtime as a static site
+  - type: static
     name: rybform-frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     headers:
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.rybform.com; connect-src 'self' https://*.clerk.accounts.dev https://clerk.rybform.com https://api.stripe.com; worker-src 'self' blob:; img-src 'self' data: blob: https://*.stripe.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;"
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://js.stripe.com; connect-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://api.stripe.com wss://*.clerk.dev; worker-src 'self' blob:; img-src 'self' data: blob: https://*.stripe.com https://img.clerk.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com; object-src 'none';"
     envVars:
       - key: VITE_CLERK_PUBLISHABLE_KEY
         sync: false
@@ -39,4 +38,4 @@ services:
         fromService:
           type: web
           name: rybform-backend
-          envVarKey: RENDER_EXTERNAL_URL # Pulls the actual URL
+          envVarKey: RENDER_EXTERNAL_URL
