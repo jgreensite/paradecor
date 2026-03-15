@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
-import { OrbitControls, OrthographicCamera, ContactShadows, Float, GizmoHelper, GizmoViewport, Text } from '@react-three/drei'
+import { OrbitControls, OrthographicCamera, Float, GizmoHelper, GizmoViewport, Text } from '@react-three/drei'
 import { SignInButton, UserButton, useUser } from '@clerk/react'
 import * as THREE from 'three'
 import makerjs from 'makerjs'
@@ -821,7 +821,6 @@ function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRi
       <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} siteConfig={siteConfig} isSingleRib={isSingleRib} isPreview={isPreview} />
       {autoSweep && viewMode === '3d' && <CameraSweep siteConfig={siteConfig} />}
 
-      <ContactShadows position={[0, -heightMM / 2 - 2, 0]} opacity={0.4} scale={Math.max(lengthMM, 200)} blur={1} far={100} />
 
       {enableOrbit && viewMode === '3d' && <OrbitControls enablePan enableZoom enableDamping dampingFactor={0.05} minDistance={20} maxDistance={2000} makeDefault />}
       {showGizmo && (
