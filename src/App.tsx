@@ -576,15 +576,18 @@ function ZoomToFit({ boundingBox, viewMode, target, siteConfig, isSingleRib = fa
   useFrame(() => {
     if (viewMode !== '3d' || !needsPositionRef.current) return
     const bb = boundingBoxRef.current
-    const maxDim = Math.max(bb.width, bb.height, bb.depth) || 800
+    const rawMax = Math.max(bb.width, bb.height, bb.depth)
+    // Wait for a valid bounding box (not placeholder/0)
+    if (rawMax < 1) return
+
+    const maxDim = rawMax
     const center = target || bb.center || new THREE.Vector3(0, 0, 0)
     
-    // Safety check: if maxDim is too small, wait or scale up
-    if (maxDim < 1) return
-
     const zoomMult = isPreview ? 1.8 : (isSingleRib ? 1.5 : siteConfig.perspectiveZoomMultiplier || 1.1)
     const distance = maxDim * zoomMult
-    camera.position.set(center.x + distance * 0.5, center.y + distance * 0.4, center.z + distance * 0.8)
+    // For shelf view: look from slightly elevated front view so ribs are visible
+    // Ribs face along X axis (ribRotateY=-90), so camera at +X, +Y, +Z sees them face-on
+    camera.position.set(center.x + distance * 0.3, center.y + distance * 0.5, center.z + distance)
     camera.lookAt(center)
     camera.updateProjectionMatrix()
     needsPositionRef.current = false
