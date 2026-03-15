@@ -1775,7 +1775,7 @@ function App() {
               <p className="text-stone mb-6">Explore the beauty of parametric architecture. Real-time 3D generation for CNC fabrication.</p>
             </div>
             <div className="relative h-[350px]">
-              <Canvas shadows camera={{ position: [10, 8, 15], fov: 45, near: 0.1, far: 5000 }} className="w-full h-full">
+              <Canvas camera={{ position: [800, 600, 1200], fov: 45, near: 1, far: 10000 }} className="w-full h-full">
                 <Scene params={params} viewMode={'3d'} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="hero-canvas" autoSweep enableOrbit={true} siteConfig={siteConfig} showGizmo={false} />
               </Canvas>
               {/* Cycling Single Ryb Preview Overlay */}
@@ -1839,7 +1839,7 @@ function App() {
                 </div>
                 <div className="flex flex-col md:flex-row gap-4 single-ryb-layout">
                   <div className="w-full md:w-72 h-56 md:h-72 shrink-0 bg-stone/5 rounded-lg overflow-hidden border border-stone/10">
-                    <Canvas shadows camera={{ position: [15, 12, 20], fov: 40, near: 0.1, far: 5000 }} className="w-full h-full">
+                    <Canvas camera={{ position: [200, 150, 250], fov: 40, near: 1, far: 10000 }} className="w-full h-full">
                       <Scene params={params} viewMode={ribViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="rib-canvas" siteConfig={siteConfig} enableOrbit={true} showGizmo={true} />
                     </Canvas>
                   </div>
@@ -1952,7 +1952,7 @@ function App() {
                       <button onClick={() => setExpandedShelfEditor(true)} className="px-2 py-1 text-xs rounded-md text-stone hover:text-charcoal hover:bg-cream transition-all" title="Expand editor">⤢</button>
                     </div>
                   </div>
-                  <Canvas shadows camera={{ position: [10, 8, 15], fov: 45, near: 0.1, far: 5000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative" style={{ minHeight: '500px' }}>
+                  <Canvas camera={{ position: [800, 600, 1200], fov: 45, near: 1, far: 10000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative" style={{ minHeight: '500px' }}>
                     <Scene params={params} viewMode={shelfViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="shelf-canvas" siteConfig={siteConfig} enableOrbit={true} showGizmo={true} highlightIndex={selectedRibIndex} />
                   </Canvas>
                   <div className="mt-4 grid grid-cols-3 gap-3">
@@ -2141,7 +2141,7 @@ function App() {
                 <button onClick={() => setExpandedRibEditor(false)} className="px-3 py-1 text-sm rounded-md bg-charcoal text-cream hover:bg-stone transition-all">✖ Close</button>
               </div>
             </div>
-            <Canvas shadows camera={{ position: [15, 12, 20], fov: 40, near: 0.1, far: 5000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10">
+            <Canvas camera={{ position: [200, 150, 250], fov: 40, near: 1, far: 10000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10">
               <Scene params={params} viewMode={ribViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} isSingleRib={true} canvasId="rib-expanded" siteConfig={siteConfig} showGizmo={true} enableOrbit={true} />
             </Canvas>
           </div>
@@ -2166,7 +2166,7 @@ function App() {
                 <button onClick={() => setExpandedShelfEditor(false)} className="px-3 py-1 text-sm rounded-md bg-charcoal text-cream hover:bg-stone transition-all">✖ Close</button>
               </div>
             </div>
-            <Canvas shadows camera={{ position: [10, 8, 15], fov: 45, near: 0.1, far: 5000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10">
+            <Canvas camera={{ position: [800, 600, 1200], fov: 45, near: 1, far: 10000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10">
               <Scene params={params} viewMode={shelfViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="shelf-expanded" siteConfig={siteConfig} showGizmo={true} enableOrbit={true} highlightIndex={selectedRibIndex} />
             </Canvas>
           </div>
