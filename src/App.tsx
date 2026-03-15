@@ -764,17 +764,20 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
 
   return (
     <group>
-      {geometries.map((geometry, index) => (
-        <mesh
-          key={index}
-          geometry={geometry}
-          material={highlightIndex === index ? highlightMaterial : material}
-          position={[positions[index].x, positions[index].y, positions[index].z]}
-          rotation={rotations[index]}
-          castShadow
-          receiveShadow
-        />
-      ))}
+      {positions.map((pos, index) => {
+        const geometry = geometries[index]
+        if (!geometry) return null
+        return (
+          <mesh
+            key={`rib-${index}`}
+            position={[pos.x, pos.y, pos.z]}
+            rotation={rotations[index]}
+          >
+            <primitive object={geometry} attach="geometry" />
+            <primitive object={highlightIndex === index ? highlightMaterial : material} attach="material" />
+          </mesh>
+        )
+      })}
       <Backplane3D
         wavePath={positions}
         lengthMM={lengthMM}
