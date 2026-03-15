@@ -806,17 +806,15 @@ function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRi
       <directionalLight position={[20, 30, 20]} intensity={1.5} castShadow />
       <directionalLight position={[-10, 10, -10]} intensity={0.3} />
 
-      <Float speed={isSingleRib ? 2 : 1} rotationIntensity={viewMode === '3d' && !isSingleRib ? 0.1 : 0} floatIntensity={0.3}>
-        {isSingleRib ? (
+      {isSingleRib ? (
+        <Float speed={2} rotationIntensity={viewMode === '3d' ? 0.1 : 0} floatIntensity={0.3}>
           <SingleRibPreview params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} />
-        ) : (
-          <group frustumCulled={false}>
-            <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />
-            {/* Debug axes to see where the center is */}
-            <axesHelper args={[500]} />
-          </group>
-        )}
-      </Float>
+        </Float>
+      ) : (
+        <group frustumCulled={false}>
+          <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />
+        </group>
+      )}
 
       <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} siteConfig={siteConfig} isSingleRib={isSingleRib} isPreview={isPreview} />
       {autoSweep && viewMode === '3d' && <CameraSweep siteConfig={siteConfig} />}
