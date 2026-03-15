@@ -420,16 +420,11 @@ function generateAllRibs(params: ShelfParams, freeformPoints?: FreeformRibPoint[
   const positions: { x: number, y: number, z: number }[] = []
   const rotations: [number, number, number][] = []
 
-  // Center the shelf by calculating the wavePath span
-  const minX = Math.min(...wavePath.map(p => p.x))
-  const maxX = Math.max(...wavePath.map(p => p.x))
-  const midX = (minX + maxX) / 2
-
   for (let i = 0; i < wavePath.length; i++) {
     const point = wavePath[i]
     const p = profiles[i]
 
-    positions.push({ x: point.x - midX, y: point.y, z: 0 })
+    positions.push({ x: point.x, y: point.y, z: 0 })
     rotations.push([
       THREE.MathUtils.degToRad(p.rotateX),
       THREE.MathUtils.degToRad(p.rotateY),
@@ -762,6 +757,16 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
   const lengthMM = toMM(params.length)
   const ribDepthMM = toMM(params.ribDepth)
 
+  // Debug: if no positions, render a visible red box so we know the Canvas works
+  if (positions.length === 0) {
+    return (
+      <mesh>
+        <boxGeometry args={[100, 100, 100]} />
+        <meshStandardMaterial color="red" />
+      </mesh>
+    )
+  }
+
   return (
     <group>
       {positions.map((pos, index) => {
@@ -770,12 +775,11 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
         return (
           <mesh
             key={`rib-${index}`}
+            geometry={geometry}
+            material={highlightIndex === index ? highlightMaterial : material}
             position={[pos.x, pos.y, pos.z]}
             rotation={rotations[index]}
-          >
-            <primitive object={geometry} attach="geometry" />
-            <primitive object={highlightIndex === index ? highlightMaterial : material} attach="material" />
-          </mesh>
+          />
         )
       })}
       <Backplane3D
