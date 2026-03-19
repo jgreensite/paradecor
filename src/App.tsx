@@ -2510,25 +2510,38 @@ function App() {
       </div>
     </section>
 
-        {/* Price */}
-        <section className="py-12 bg-charcoal text-cream">
+        {/* Total Price Summary Section */}
+        <section className="py-12 bg-charcoal text-cream border-t border-cream/10">
           <div className="max-w-2xl mx-auto px-6">
-            <div className="card bg-stone/20 border border-stone/30 p-6">
-              <div className="text-center mb-4">
-                <p className="font-display text-4xl mb-1">${totalPrice}</p>
-                <p className="text-cream/50 text-sm">{params.length.value}{params.length.unit} × {params.height.value}{params.height.unit} • {params.ribCount} {params.ribShape} rybs</p>
+            <div className="bg-stone/10 backdrop-blur-md border border-cream/10 rounded-2xl p-8 shadow-2xl">
+              <div className="text-center mb-6">
+                <p className="font-display text-5xl mb-2 text-oak">${totalPrice}</p>
+                <div className="flex items-center justify-center gap-2 text-cream/60 text-sm">
+                  <span>{params.length.value}{params.length.unit} × {params.height.value}{params.height.unit}</span>
+                  <span className="w-1 h-1 rounded-full bg-cream/20" />
+                  <span>{params.ribCount} {params.ribShape} rybs</span>
+                </div>
               </div>
+              
               {user ? (
                 isAdmin ? (
-                  <button disabled={isRedirecting} className="w-full py-3 bg-oak text-charcoal font-medium rounded-lg hover:bg-cream transition-colors disabled:opacity-50" onClick={handleStripeCheckout}>
-                    {isRedirecting ? 'Redirecting...' : 'Export & Order'}
+                  <button 
+                    disabled={isRedirecting} 
+                    className="w-full py-4 bg-oak text-charcoal font-bold rounded-xl hover:bg-cream hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 shadow-lg shadow-oak/20" 
+                    onClick={handleStripeCheckout}
+                  >
+                    {isRedirecting ? 'Redirecting to Checkout...' : 'Export & Order Components'}
                   </button>
                 ) : (
-                  <button disabled className="w-full py-3 bg-stone/20 text-stone font-medium rounded-lg cursor-not-allowed">Admin access required to export</button>
+                  <div className="text-center p-4 bg-terracotta/10 border border-terracotta/20 rounded-xl">
+                    <p className="text-terracotta text-sm font-medium">Administrative access required to export production files.</p>
+                  </div>
                 )
               ) : (
                 <SignInButton mode="modal" fallbackRedirectUrl="/">
-                  <button className="w-full py-3 bg-charcoal text-cream font-medium border border-cream/20 rounded-lg hover:bg-stone transition-colors">Sign in to Export</button>
+                  <button className="w-full py-4 bg-cream text-charcoal font-bold rounded-xl hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-lg">
+                    Sign in to Export Design
+                  </button>
                 </SignInButton>
               )}
             </div>
