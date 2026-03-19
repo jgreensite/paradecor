@@ -1,6 +1,23 @@
 import request from 'supertest';
 import { jest } from '@jest/globals';
 
+// Mock Supabase
+jest.unstable_mockModule('@supabase/supabase-js', () => {
+  return {
+    createClient: jest.fn().mockImplementation(() => ({
+      from: jest.fn().mockReturnThis(),
+      insert: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({
+        data: { id: 'mock-order-123' },
+        error: null
+      })
+    }))
+  };
+});
+
 // Mock Stripe to prevent real API calls during tests
 jest.unstable_mockModule('stripe', () => {
   return {
