@@ -1,8 +1,12 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera, Float, GizmoHelper, GizmoViewport, Text } from '@react-three/drei'
 import { SignInButton, UserButton, useUser } from '@clerk/react'
 import * as THREE from 'three'
+// @ts-ignore
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
+// @ts-ignore
+import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader'
 import makerjs from 'makerjs'
 import { createSlotWithDogbone, createBackplaneOutline, generateCncLayout } from './backplane'
 
@@ -53,6 +57,7 @@ interface ShelfParams {
   backplaneDogboneRadius: number
   material: string
   finish: string
+  backplaneBezier?: CustomRyb | null
 }
 
 interface FreeformRibPoint {
@@ -331,15 +336,25 @@ function generateRibGeometry(
       const base = sideStart + i * 4
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3)
     }
-  } else {
-    // Return empty geometry if no valid shape parameters to avoid crash
-    return geometry;
+  }
+
+  // Final check to avoid WebGL context loss on missing attributes
+  if (vertices.length === 0) {
+    console.warn(`generateRibGeometry[${shape}]: No vertices generated! Falling back to unit point.`)
+    vertices.push(0, 0, 0, 0.1, 0, 0, 0, 0.1, 0)
+    normals.push(0, 0, 1, 0, 0, 1, 0, 0, 1)
+    indices.push(0, 1, 2)
   }
 
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3))
   geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
   geometry.setIndex(indices)
-  geometry.computeVertexNormals()
+  
+  try {
+    geometry.computeVertexNormals()
+  } catch (e) {
+    console.error(`Error computing vertex normals for shape ${shape}:`, e)
+  }
 
   return geometry
 }
@@ -361,8 +376,15 @@ function generateAllRibParams(params: ShelfParams, wavePath: { x: number, y: num
     const t = i / (wavePath.length - 1 || 1)
     const transform = interpolateTransform(activeTransforms, t)
 
-    const scaledWidth = baseX * transform.scaleX
-    const scaledHeight = baseY * transform.scaleY
+    let scaledWidth = baseX * transform.scaleX
+    let scaledHeight = baseY * transform.scaleY
+
+    // Apply backplane bezier stretching if enabled
+    if (params.backplaneBezier) {
+      const lengthMM = toMM(params.length)
+      const bpH = getCustomRybHeightAtX(params.backplaneBezier, wavePath[i].x, lengthMM, scaledHeight)
+      scaledHeight = bpH + (params.backplaneOrganicOffset * 0.5) // Stretch to fit backplane + some clearance
+    }
 
     let ribFreeformPoints = freeformPoints
 
@@ -441,82 +463,112 @@ function Backplane3D({ wavePath, lengthMM, depthMM, materialThicknessMM, enabled
   const bpDepth = materialThicknessMM
 
   const getH = (x: number) => {
-    if (slotLayouts.length === 0) return 0;
-    if (x <= slotLayouts[0].x) return slotLayouts[0].rybH;
-    if (x >= slotLayouts[slotLayouts.length - 1].x) return slotLayouts[slotLayouts.length - 1].rybH;
-    for (let i = 0; i < slotLayouts.length - 1; i++) {
-      if (x >= slotLayouts[i].x && x <= slotLayouts[i + 1].x) {
-        const range = slotLayouts[i + 1].x - slotLayouts[i].x;
-        if (range === 0) return slotLayouts[i].rybH;
-        return slotLayouts[i].rybH + ((x - slotLayouts[i].x) / range) * (slotLayouts[i + 1].rybH - slotLayouts[i].rybH);
+    try {
+      if (!slotLayouts || slotLayouts.length === 0) return 300; // Fallback height
+      const sorted = [...slotLayouts].sort((a, b) => a.x - b.x);
+      if (!sorted[0]) return 300;
+
+      // If a custom bezier is provided, it ALWAYS defines the height for the organic backplane
+      // Note: In a more advanced version, we might want to evaluate the bezier directly here.
+      // For now, slotLayouts already uses the evaluated heights from generateAllRibParams.
+      
+      if (x <= sorted[0].x) return sorted[0].rybH;
+      if (x >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].rybH;
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (x >= sorted[i].x && x <= sorted[i+1].x) {
+          const t = (x - sorted[i].x) / (sorted[i+1].x - sorted[i].x || 1);
+          return sorted[i].rybH + t * (sorted[i+1].rybH - sorted[i].rybH);
+        }
       }
+      return sorted[0].rybH;
+    } catch (e) {
+      return 300;
     }
-    return slotLayouts[0].rybH;
   }
 
-  const renderSlotOverlays = () => (
-    <group position={[0, 0, -depthMM * 0.6 + bpDepth / 2 + 0.1]}>
+  const renderSlotLabels = () => (
+    <group position={[0, 0, -depthMM * 0.6 + bpDepth + 1]}>
       {slotLayouts.map((slot, i) => (
         <group key={i} position={[slot.x, slot.y, 0]}>
-          <group rotation={[0, 0, slot.rotateZ * Math.PI / 180]}>
-            <mesh position={[slot.shiftX, 0, 0]}>
-              <planeGeometry args={[slot.w, slot.h]} />
-              <meshBasicMaterial color="#FF3333" opacity={0.65} transparent depthWrite={false} side={THREE.DoubleSide} />
-            </mesh>
-          </group>
-          {/* Label positioned above the theoretical slot bounds */}
-          <Text position={[0, slot.h / 2 + 10 + Math.abs(slot.w * Math.sin(slot.rotateZ * Math.PI / 180)), 0]} fontSize={8} color="#FFFFFF" outlineWidth={0.5} outlineColor="#000000" anchorX="center" anchorY="bottom">
-            {`${slot.w.toFixed(1)} × ${slot.h.toFixed(1)}`}
-          </Text>
+          <Suspense fallback={null}>
+            <Text 
+              position={[0, slot.h / 2 + 15, 0]} 
+              fontSize={8} 
+              color="#FFFFFF" 
+              outlineWidth={0.5} 
+              outlineColor="#000000" 
+              anchorX="center" 
+              anchorY="bottom"
+            >
+              {`${slot.w.toFixed(1)} × ${slot.h.toFixed(1)}`}
+            </Text>
+          </Suspense>
         </group>
       ))}
     </group>
   )
 
-  if (shape === 'organic') {
-    // Generate a shape that follows the wave path at both top and bottom to create a 'ribbon'
-    const bottomPoints = wavePath.map(p => {
-      const ribbonHeight = getH(p.x) + (organicOffset * 2);
-      return new THREE.Vector2(p.x, p.y - ribbonHeight / 2)
-    })
-    const topPoints = [...wavePath].reverse().map(p => {
-      const ribbonHeight = getH(p.x) + (organicOffset * 2);
-      return new THREE.Vector2(p.x, p.y + ribbonHeight / 2)
-    })
-
-    const fullShape = new THREE.Shape()
-    if (bottomPoints.length > 0) {
-      fullShape.moveTo(bottomPoints[0].x, bottomPoints[0].y)
-      bottomPoints.slice(1).forEach(p => fullShape.lineTo(p.x, p.y))
-      topPoints.forEach(p => fullShape.lineTo(p.x, p.y))
-      fullShape.closePath()
+  // Robust shape generation with safety checks
+  const bpShape = useMemo(() => {
+    try {
+      if (shape !== 'organic') return null;
+      const s = new THREE.Shape()
+      const pts: THREE.Vector2[] = []
+      
+      // Filter out duplicate or too-close points to avoid degenerate triangulation
+      const filteredPath = wavePath.filter((p, i) => i === 0 || Math.abs(p.x - wavePath[i-1].x) > 0.1)
+      
+      for (let i = 0; i < filteredPath.length; i++) {
+        const p = filteredPath[i]
+        const h = getH(p.x) + (organicOffset * 2)
+        pts.push(new THREE.Vector2(p.x, p.y - h / 2))
+      }
+      
+      for (let i = filteredPath.length - 1; i >= 0; i--) {
+        const p = filteredPath[i]
+        const h = getH(p.x) + (organicOffset * 2)
+        pts.push(new THREE.Vector2(p.x, p.y + h / 2))
+      }
+      
+      if (pts.length < 3) return null
+      s.moveTo(pts[0].x, pts[0].y)
+      for (let i = 1; i < pts.length; i++) {
+        s.lineTo(pts[i].x, pts[i].y)
+      }
+      s.closePath()
+      return s
+    } catch (e) {
+      console.error("Failed to generate organic backplane shape:", e)
+      return null
     }
+  }, [wavePath, shape, organicOffset, slotLayouts])
 
+  if (shape === 'organic' && bpShape) {
     return (
       <group>
-        <mesh position={[0, 0, -depthMM * 0.6]} castShadow receiveShadow>
-          <extrudeGeometry args={[fullShape, { depth: bpDepth, bevelEnabled: false }]} />
+        <mesh position={[0, 0, -depthMM * 0.6]} castShadow={false} receiveShadow>
+          <extrudeGeometry args={[bpShape, { depth: bpDepth, bevelEnabled: false }]} />
           <meshStandardMaterial color="#8B7355" roughness={0.7} metalness={0.05} />
         </mesh>
-        {renderSlotOverlays()}
+        {renderSlotLabels()}
       </group>
     )
   }
 
-  // Fallback to rectangular box but with height following the wave's bounding box
+  // Rectangular fallback
   const minY = Math.min(...wavePath.map(p => p.y - getH(p.x) / 2))
   const maxY = Math.max(...wavePath.map(p => p.y + getH(p.x) / 2))
-  const bpHeight = maxY - minY
+  const bpHeight = (maxY - minY) + (organicOffset * 2)
   const centerX = (wavePath[0].x + wavePath[wavePath.length - 1].x) / 2
   const centerY = (minY + maxY) / 2
 
   return (
     <group>
-      <mesh position={[centerX, centerY, -depthMM * 0.6 + bpDepth / 2]} castShadow receiveShadow>
+      <mesh position={[centerX, centerY, -depthMM * 0.6 + bpDepth / 2]} castShadow={false} receiveShadow>
         <boxGeometry args={[lengthMM * 1.05, bpHeight, bpDepth]} />
         <meshStandardMaterial color="#8B7355" roughness={0.7} metalness={0.05} />
       </mesh>
-      {renderSlotOverlays()}
+      {renderSlotLabels()}
     </group>
   )
 }
@@ -556,28 +608,31 @@ function calculateShelfBoundingBox(params: ShelfParams): { width: number, height
     center: new THREE.Vector3(0, 0, 0)
   }
 }
-
 function ZoomToFit({ boundingBox, viewMode, target, siteConfig, isSingleRib = false, isPreview = false }: { boundingBox: { width: number, height: number, depth: number, center?: THREE.Vector3 }, viewMode: ViewMode, target?: THREE.Vector3, siteConfig: typeof INITIAL_SITE_CONFIG, isSingleRib?: boolean, isPreview?: boolean }) {
   const { camera, size: canvasSize } = useThree()
-  const boundingBoxRef = useRef(boundingBox)
-  boundingBoxRef.current = boundingBox
+  console.log(`ZoomToFit [Render] (${isPreview ? 'preview' : 'full'}): width=${boundingBox.width} viewMode=${viewMode}`)
 
-  // Reposition camera in 3D mode whenever bounding box changes or viewMode switches to 3d
-  useEffect(() => {
+  useFrame(() => {
     if (viewMode !== '3d') return
     const bb = boundingBox
-    const maxDim = Math.max(bb.width, bb.height, bb.depth)
-    if (maxDim < 1) return
+    const w = bb.width || (isSingleRib ? 150 : 1200)
+    const h = bb.height || (isSingleRib ? 150 : 600)
+    const d = bb.depth || (isSingleRib ? 20 : 200)
+    const maxDim = Math.max(w, h, d)
 
     const center = target || bb.center || new THREE.Vector3(0, 0, 0)
-    const zoomMult = isPreview ? 1.8 : (isSingleRib ? 1.5 : siteConfig.perspectiveZoomMultiplier || 1.1)
+    const zoomMult = isPreview ? 1.8 : (isSingleRib ? 1.5 : siteConfig.perspectiveZoomMultiplier || 1.2)
     const distance = maxDim * zoomMult
-    camera.position.set(center.x + distance * 0.3, center.y + distance * 0.5, center.z + distance)
-    camera.lookAt(center)
-    camera.updateProjectionMatrix()
-  }, [boundingBox.width, boundingBox.height, boundingBox.depth, viewMode, isSingleRib, isPreview])
+    
+    // Only set on first frame or if maxDim changes drastically
+    if (camera.position.length() < 10 || Math.abs(camera.position.z - (center.z + distance)) > 5000) {
+       console.log(`ZoomToFit [useFrame-3d]: setting position`)
+       camera.position.set(center.x + distance * 0.4, center.y + distance * 0.6, center.z + distance)
+       camera.lookAt(center)
+    }
+  })
 
-  // Orthographic views: always recalculate (deterministic viewpoints)
+  // Orthographic effects remain as effects because they are snapshots
   useEffect(() => {
     if (viewMode === '3d') return
     const center = target || boundingBox.center || new THREE.Vector3(0, 0, 0)
@@ -596,16 +651,18 @@ function ZoomToFit({ boundingBox, viewMode, target, siteConfig, isSingleRib = fa
       visibleHeight = boundingBox.height
     }
 
-    const zoomX = canvasSize.width / ((visibleWidth || 50) * padding)
-    const zoomY = canvasSize.height / ((visibleHeight || 50) * padding)
+    const zoomX = canvasSize.width / ((visibleWidth || 1000) * padding)
+    const zoomY = canvasSize.height / ((visibleHeight || 1000) * padding)
     const orthoZoom = Math.min(zoomX, zoomY)
+
+    console.log(`ZoomToFit [${viewMode}]: center=${center.x},${center.y},${center.z} orthoZoom=${orthoZoom}`)
 
     const dist = maxDim * 2
     if (viewMode === 'top') {
       camera.position.set(center.x, center.y + dist, center.z)
     } else if (viewMode === 'front') {
       camera.position.set(center.x, center.y, center.z + dist)
-    } else {
+    } else if (viewMode === 'side') {
       camera.position.set(center.x + dist, center.y, center.z)
     }
     camera.lookAt(center)
@@ -613,7 +670,7 @@ function ZoomToFit({ boundingBox, viewMode, target, siteConfig, isSingleRib = fa
       ; (camera as THREE.OrthographicCamera).zoom = orthoZoom
       camera.updateProjectionMatrix()
     }
-  }, [camera, boundingBox, viewMode, target, canvasSize])
+  }, [camera, boundingBox.width, boundingBox.height, boundingBox.depth, viewMode, target, canvasSize, siteConfig.orthoZoomPadding])
 
   return null
 }
@@ -681,24 +738,52 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
     [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, params.sizeTransforms]
   )
 
-  const { positions, rotations, profiles } = useMemo(() => generateAllRibs(params, freeformPoints, customRybSequence), [memoKey, freeformPoints, customRybSequence])
+  const { positions, rotations, profiles } = useMemo(() => {
+    const result = generateAllRibs(params, freeformPoints, customRybSequence)
+    console.log('ShelfMesh generateAllRibs result:', {
+      positionsCount: result.positions.length,
+      firstPos: result.positions[0]
+    })
+    return result
+  }, [memoKey, freeformPoints, customRybSequence])
 
-  // Optimize: Use templates for non-freeform shapes to avoid 200+ unique geometries
-  const geometries = useMemo(() => {
-    if (params.ribShape !== 'freeform') {
-      // Create a small number of template geometries based on size transforms if they are active
-      // For now, we'll generate the unique geometries but at least they aren't rotated in memory
-      return positions.map((_, i) => {
-        const p = profiles[i]
-        return generateRibGeometry(p.shape, p.width, p.height, depthMM, params.flatEdge, p.freeformPts)
-      })
-    } else {
-      // Freeform always needs unique geometries due to point interpolation
-      return positions.map((_, i) => {
-        const p = profiles[i]
-        return generateRibGeometry(p.shape, p.width, p.height, depthMM, params.flatEdge, p.freeformPts)
-      })
+  // Geometry caching and disposal to fix lag
+  const geometryCacheRef = useRef<Map<string, THREE.BufferGeometry>>(new Map())
+
+  // Clean up geometries on unmount
+  useEffect(() => {
+    return () => {
+      geometryCacheRef.current.forEach(geo => geo.dispose())
+      geometryCacheRef.current.clear()
     }
+  }, [])
+
+  const geometries = useMemo(() => {
+    const newGeometries: THREE.BufferGeometry[] = []
+    const currentCache = geometryCacheRef.current
+    
+    // We'll keep track of which geometries are used in this render to dispose of old ones?
+    // Actually, for simplicity, let's just clear and rebuild if shape type changes,
+    // or keep a rolling cache. For now, a simple dimension-based cache.
+    
+    positions.forEach((_, i) => {
+      const p = profiles[i]
+      // Create a cache key for this specific rib shape/size
+      const cacheKey = `${p.shape}-${Math.round(p.width*10)/10}-${Math.round(p.height*10)/10}-${Math.round(depthMM*10)/10}-${params.flatEdge}-${p.freeformPts ? JSON.stringify(p.freeformPts) : 'no-ff'}`
+      
+      let geo = currentCache.get(cacheKey)
+      if (!geo) {
+        geo = generateRibGeometry(p.shape, p.width, p.height, depthMM, params.flatEdge, p.freeformPts)
+        currentCache.set(cacheKey, geo)
+      }
+      newGeometries.push(geo)
+    })
+
+    // Optional: Dispose of geometries in cache that weren't used in this render?
+    // For now, let's just keep them to avoid churn. 
+    // If the cache grows too large, we can implement a more complex eviction policy.
+    
+    return newGeometries
   }, [positions, profiles, depthMM, params.flatEdge, params.ribShape])
 
 
@@ -766,6 +851,7 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
             material={highlightIndex === index ? highlightMaterial : material}
             position={[pos.x, pos.y, pos.z]}
             rotation={rotations[index]}
+            frustumCulled={false}
           />
         )
       })}
@@ -783,7 +869,42 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
   )
 }
 
-function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRib = false, canvasId, autoSweep = false, enableOrbit = true, siteConfig, showGizmo = false, isPreview = false, highlightIndex }: { params: ShelfParams, viewMode: ViewMode, freeformPoints?: FreeformRibPoint[], customRybSequence?: CustomRybSequence | null, isSingleRib?: boolean, canvasId?: string, autoSweep?: boolean, enableOrbit?: boolean, siteConfig: typeof INITIAL_SITE_CONFIG, showGizmo?: boolean, isPreview?: boolean, highlightIndex?: number }) {
+function Scene({ 
+  params, 
+  viewMode, 
+  freeformPoints, 
+  customRybSequence, 
+  isSingleRib = false, 
+  canvasId, 
+  autoSweep = false, 
+  enableOrbit = true, 
+  siteConfig, 
+  showGizmo = false, 
+  isPreview = false, 
+  highlightIndex, 
+  theme = 'light',
+  uploadedMesh = null,
+  uploadedMeshRotation = { x: 0, y: 0, z: 0 },
+  uploadedMeshScale = 1.0
+}: { 
+  params: ShelfParams, 
+  viewMode: ViewMode, 
+  freeformPoints?: FreeformRibPoint[], 
+  customRybSequence?: CustomRybSequence | null, 
+  isSingleRib?: boolean, 
+  canvasId?: string, 
+  autoSweep?: boolean, 
+  enableOrbit?: boolean, 
+  siteConfig: typeof INITIAL_SITE_CONFIG, 
+  showGizmo?: boolean, 
+  isPreview?: boolean, 
+  highlightIndex?: number, 
+  theme?: 'light' | 'dark',
+  uploadedMesh?: THREE.Mesh | null,
+  uploadedMeshRotation?: { x: number, y: number, z: number },
+  uploadedMeshScale?: number
+}) {
+  console.log(`Rendering Scene [${canvasId || 'unknown'}]:`, { isSingleRib, viewMode, theme })
   const lengthMM = toMM(params.length)
   const heightMM = toMM(params.height)
 
@@ -794,35 +915,51 @@ function Scene({ params, viewMode, freeformPoints, customRybSequence, isSingleRi
     [params, freeformPoints, isSingleRib]
   )
 
+  const target = useMemo(() => new THREE.Vector3(0, 0, 0), [])
+
   return (
     <>
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[20, 30, 20]} intensity={1.5} castShadow />
-      <directionalLight position={[-10, 10, -10]} intensity={0.3} />
+      <color attach="background" args={[theme === 'dark' ? '#2C2A26' : '#f5f5f4']} />
+      
+      <ambientLight intensity={1.2} />
+      <directionalLight position={[2000, 3000, 2000]} intensity={1.0} />
+      <pointLight position={[-1000, 1000, -1000]} intensity={0.5} />
+
+      <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={target} siteConfig={siteConfig} isSingleRib={isSingleRib} isPreview={isPreview} />
 
       {isSingleRib ? (
         <Float speed={2} rotationIntensity={viewMode === '3d' ? 0.1 : 0} floatIntensity={0.3}>
           <SingleRibPreview params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} />
         </Float>
       ) : (
-        <group frustumCulled={false}>
+        <group>
           <ShelfMesh params={params} freeformPoints={freeformPoints} customRybSequence={customRybSequence} highlightIndex={highlightIndex} />
+          
+          {uploadedMesh && (
+            <primitive 
+              object={uploadedMesh} 
+              rotation={[
+                THREE.MathUtils.degToRad(uploadedMeshRotation.x),
+                THREE.MathUtils.degToRad(uploadedMeshRotation.y),
+                THREE.MathUtils.degToRad(uploadedMeshRotation.z)
+              ]}
+              scale={[uploadedMeshScale, uploadedMeshScale, uploadedMeshScale]}
+            />
+          )}
         </group>
       )}
 
-      <ZoomToFit boundingBox={boundingBox} viewMode={viewMode} target={new THREE.Vector3(0, 0, 0)} siteConfig={siteConfig} isSingleRib={isSingleRib} isPreview={isPreview} />
+      <axesHelper args={[1000]} />
+      
       {autoSweep && viewMode === '3d' && <CameraSweep siteConfig={siteConfig} />}
 
-
-      {enableOrbit && viewMode === '3d' && <OrbitControls enablePan enableZoom enableDamping dampingFactor={0.05} minDistance={20} maxDistance={2000} makeDefault />}
+      {enableOrbit && viewMode === '3d' && <OrbitControls target={target} enablePan enableZoom enableDamping dampingFactor={0.05} minDistance={10} maxDistance={20000} makeDefault />}
+      
       {showGizmo && (
         <GizmoHelper alignment="bottom-right" margin={[40, 40]}>
           <GizmoViewport axisColors={['#9d4b4b', '#2f7f4f', '#3b5b9d']} labelColor="white" />
         </GizmoHelper>
       )}
-      {viewMode === 'top' && <OrthographicCamera makeDefault position={[0, 100, 0]} zoom={10} near={1} far={5000} onUpdate={c => c.lookAt(0, 0, 0)} />}
-      {viewMode === 'front' && <OrthographicCamera makeDefault position={[0, 0, 100]} zoom={10} near={1} far={5000} onUpdate={c => c.lookAt(0, 0, 0)} />}
-      {viewMode === 'side' && <OrthographicCamera makeDefault position={[100, 0, 0]} zoom={10} near={1} far={5000} onUpdate={c => c.lookAt(0, 0, 0)} />}
     </>
   )
 }
@@ -911,12 +1048,81 @@ function getCurvePoints(segment: CurveSegment, resolution: number = 20): BezierC
   return points
 }
 
+function createRybFromWave(lengthMM: number, h: number, waveHeight: number, waveFrequency: number): CustomRyb {
+  const ribCount = 12
+  const wavePath = generateWavePath(lengthMM, 0, waveHeight, waveFrequency, ribCount)
+  
+  const segments: CurveSegment[] = []
+  
+  // Top edge (following the wave)
+  for(let i=0; i<wavePath.length-1; i++) {
+    const p1 = wavePath[i]
+    const p2 = wavePath[i+1]
+    segments.push({
+      type: 'line',
+      start: { x: (p1.x + lengthMM/2)/lengthMM * 400 + 50, y: 150 + p1.y - h/2 },
+      end: { x: (p2.x + lengthMM/2)/lengthMM * 400 + 50, y: 150 + p2.y - h/2 }
+    })
+  }
+  // Right edge
+  segments.push({
+    type: 'line',
+    start: { x: 450, y: 150 + wavePath[wavePath.length-1].y - h/2 },
+    end: { x: 450, y: 150 + wavePath[wavePath.length-1].y + h/2 }
+  })
+  // Bottom edge (straight-ish or mirrored wave, let's do mirrored/equal height)
+  for(let i=wavePath.length-1; i>0; i--) {
+    const p1 = wavePath[i]
+    const p2 = wavePath[i-1]
+    segments.push({
+      type: 'line',
+      start: { x: (p1.x + lengthMM/2)/lengthMM * 400 + 50, y: 150 + p1.y + h/2 },
+      end: { x: (p2.x + lengthMM/2)/lengthMM * 400 + 50, y: 150 + p2.y + h/2 }
+    })
+  }
+  // Left edge
+  segments.push({
+    type: 'line',
+    start: { x: 50, y: 150 + wavePath[0].y + h/2 },
+    end: { x: 50, y: 150 + wavePath[0].y - h/2 }
+  })
+  
+  return {
+    id: generateId(),
+    name: 'Organic Base',
+    index: 0,
+    depth: 20,
+    segments
+  }
+}
+
 function getAllPointsFromRyb(ryb: CustomRyb): BezierControlPoint[] {
   const allPoints: BezierControlPoint[] = []
   ryb.segments.forEach(seg => {
     allPoints.push(...getCurvePoints(seg))
   })
   return allPoints
+}
+
+function getCustomRybHeightAtX(ryb: CustomRyb, x: number, lengthMM: number, defaultH: number): number {
+  const pts = getAllPointsFromRyb(ryb)
+  if (pts.length < 2) return defaultH
+  
+  // Normalize x from shelf space [-lengthMM/2, lengthMM/2] to editor canvas space [0, 500]
+  const normalizedX = (x + lengthMM / 2) / (lengthMM || 1) * 500
+  
+  // Find points on either side of normalizedX
+  const sorted = [...pts].sort((a, b) => a.x - b.x)
+  if (normalizedX <= sorted[0].x) return sorted[0].y
+  if (normalizedX >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y
+  
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (normalizedX >= sorted[i].x && normalizedX <= sorted[i+1].x) {
+      const t = (normalizedX - sorted[i].x) / (sorted[i+1].x - sorted[i].x || 1)
+      return sorted[i].y + t * (sorted[i+1].y - sorted[i].y)
+    }
+  }
+  return defaultH
 }
 
 interface CustomRybEditorProps {
@@ -1514,17 +1720,165 @@ function App() {
     backplaneDogboneRadius: 3.5,
     material: 'birch-plywood',
     finish: 'raw',
+    backplaneBezier: null,
   })
 
   const [activeSection, setActiveSection] = useState('design')
   const [activePreset, setActivePreset] = useState('gentle')
   const [ribViewMode, setRibViewMode] = useState<ViewMode>('3d')
   const [shelfViewMode, setShelfViewMode] = useState<ViewMode>('3d')
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [showExport, setShowExport] = useState(false)
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
+  const [showBackplaneEditor, setShowBackplaneEditor] = useState(false)
+  const [uploadedMesh, setUploadedMesh] = useState<THREE.Mesh | null>(null)
+  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: 180, y: -90, z: 0 })
+  const [uploadedMeshScale, setUploadedMeshScale] = useState(1.0)
+  const [isSlicing, setIsSlicing] = useState(false)
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
   const [customRybSequence, setCustomRybSequence] = useState<CustomRybSequence | null>(null)
   const [isExporting, setIsExporting] = useState(false)
+  
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const contents = event.target?.result
+      if (!contents) return
+      
+      const extension = file.name.split('.').pop()?.toLowerCase()
+      
+      try {
+        if (extension === 'stl') {
+          const loader = new STLLoader()
+          const geometry = loader.parse(contents as ArrayBuffer)
+          const material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
+          const mesh = new THREE.Mesh(geometry, material)
+          setUploadedMesh(mesh)
+        } else if (extension === 'obj') {
+          const loader = new OBJLoader()
+          const object = loader.parse(contents as string)
+          let mesh: THREE.Mesh | null = null
+          object.traverse((child: any) => {
+            if (child.isMesh) mesh = child as THREE.Mesh
+          })
+          if (mesh) {
+            (mesh as THREE.Mesh).material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
+            setUploadedMesh(mesh)
+          }
+        }
+      } catch (err) {
+        console.error('Error loading mesh:', err)
+        alert('Failed to load 3D mesh. Please ensure it is a valid STL or OBJ file.')
+      }
+    }
+    
+    if (file.name.endsWith('.stl')) {
+      reader.readAsArrayBuffer(file)
+    } else {
+      reader.readAsText(file)
+    }
+  }
+
+  const handleApplySlicing = () => {
+    if (!uploadedMesh) return
+    setIsSlicing(true)
+    
+    // Move heavy computation to a macrotask to keep UI responsive
+    setTimeout(() => {
+      try {
+        const sequence = sliceMeshToRybs(uploadedMesh, params)
+        setCustomRybSequence(sequence)
+        handleParamChange('ribShape', 'freeform')
+        alert(`Successfully converted 3D mesh into ${sequence.rybs.length} ribs.`)
+      } catch (err) {
+        console.error('Slicing error:', err)
+        alert('Error slicing mesh. Please try a simpler model.')
+      } finally {
+        setIsSlicing(false)
+      }
+    }, 100)
+  }
+
+  function sliceMeshToRybs(mesh: THREE.Mesh, params: ShelfParams): CustomRybSequence {
+    const ribCount = params.ribCount
+    const rybs: CustomRyb[] = []
+    
+    mesh.geometry.computeBoundingBox()
+    const bbox = mesh.geometry.boundingBox!
+    const size = new THREE.Vector3()
+    bbox.getSize(size)
+    const center = new THREE.Vector3()
+    bbox.getCenter(center)
+    
+    const raycaster = new THREE.Raycaster()
+    
+    for (let i = 0; i < ribCount; i++) {
+      const t = i / (ribCount - 1 || 1)
+      const x = center.x - size.x/2 + t * size.x
+      
+      const segments: CurveSegment[] = []
+      const resolution = 12 // Number of samples across depth
+      const topPts: {x: number, y: number}[] = []
+      const bottomPts: {x: number, y: number}[] = []
+      
+      for (let j = 0; j <= resolution; j++) {
+          const tz = j / resolution
+          const z = center.z - size.z/2 + tz * size.z
+          
+          // Ray from far above
+          raycaster.set(new THREE.Vector3(x, center.y + size.y * 2, z), new THREE.Vector3(0, -1, 0))
+          const intersectsTop = raycaster.intersectObject(mesh)
+          
+          // Ray from far below
+          raycaster.set(new THREE.Vector3(x, center.y - size.y * 2, z), new THREE.Vector3(0, 1, 0))
+          const intersectsBottom = raycaster.intersectObject(mesh)
+          
+          if (intersectsTop.length > 0 && intersectsBottom.length > 0) {
+              // Map 3D mesh local space to 500x300 editor canvas space
+              const canvasX = tz * 400 + 50
+              const normTopY = (intersectsTop[0].point.y - center.y) / (size.y || 1)
+              const normBottomY = (intersectsBottom[0].point.y - center.y) / (size.y || 1)
+              
+              const canvasTopY = 150 - normTopY * 100
+              const canvasBottomY = 150 - normBottomY * 100
+              
+              topPts.push({x: canvasX, y: canvasTopY})
+              bottomPts.push({x: canvasX, y: canvasBottomY})
+          }
+      }
+      
+      if (topPts.length > 1) {
+          for(let k=0; k<topPts.length-1; k++) segments.push({type:'line', start: topPts[k], end: topPts[k+1]})
+          segments.push({type:'line', start: topPts[topPts.length-1], end: bottomPts[bottomPts.length-1]})
+          for(let k=bottomPts.length-1; k>0; k--) segments.push({type:'line', start: bottomPts[k], end: bottomPts[k-1]})
+          segments.push({type:'line', start: bottomPts[0], end: topPts[0]})
+      } else {
+        // Fallback for empty slice
+        segments.push({type:'line', start:{x:50,y:140}, end:{x:450,y:140}})
+        segments.push({type:'line', start:{x:450,y:140}, end:{x:450,y:160}})
+        segments.push({type:'line', start:{x:450,y:160}, end:{x:50,y:160}})
+        segments.push({type:'line', start:{x:50,y:160}, end:{x:50,y:140}})
+      }
+      
+      rybs.push({
+          id: `ryb-${Date.now()}-${i}`,
+          name: `Slice ${i+1}`,
+          index: i,
+          depth: 20,
+          segments
+      })
+    }
+    
+    return {
+      rybs,
+      selectedIndex: 0,
+      spacingType: 'even',
+      interpolation: 'linear'
+    } as CustomRybSequence
+  }
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [cyclingRybIndex, setCyclingRybIndex] = useState(0)
   const [cyclingFadeIn, setCyclingFadeIn] = useState(true)
@@ -1787,23 +2141,78 @@ function App() {
         {/* Designer */}
         <section id="designer" className="py-16 bg-ivory">
           <div className="max-w-7xl mx-auto px-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="font-display text-2xl text-charcoal">Designer</h2>
-              <div className="flex bg-cream p-1 rounded-lg border border-stone/10 shadow-sm">
-                <button
-                  onClick={() => handleGlobalUnitChange('mm')}
-                  className={`px-4 py-1.5 text-sm rounded-md transition-all ${globalUnit === 'mm' ? 'bg-charcoal text-cream shadow' : 'text-stone hover:text-charcoal'}`}
-                >
-                  Metric (mm)
-                </button>
-                <button
-                  onClick={() => handleGlobalUnitChange('in')}
-                  className={`px-4 py-1.5 text-sm rounded-md transition-all ${globalUnit === 'in' ? 'bg-charcoal text-cream shadow' : 'text-stone hover:text-charcoal'}`}
-                >
-                  Imperial (in)
-                </button>
-              </div>
+            <div className="flex justify-between items-baseline mb-8 pb-4 border-b border-stone/10">
+              <h2 className="font-display text-3xl text-charcoal">Designer</h2>
+              <p className="text-sm text-stone">Studio for Parametric Generative Design</p>
             </div>
+
+            <div className="grid lg:grid-cols-4 gap-8">
+              <aside className="lg:col-span-1 space-y-6">
+                {/* 3D Shape Upload */}
+                <div className="bg-cream rounded-xl p-5 border border-stone/10 shadow-sm">
+                  <h3 className="font-display text-sm text-charcoal mb-4 flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    3D Shape Integration
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center w-full">
+                      <label className="flex flex-col items-center justify-center w-full min-h-[120px] border-2 border-stone/10 border-dashed rounded-xl cursor-pointer bg-stone/5 hover:bg-stone/10 transition-all py-4 px-2">
+                        <div className="flex flex-col items-center justify-center text-center">
+                          <p className="mb-2 text-xs text-stone"><span className="font-semibold">Upload 3D Mesh</span></p>
+                          <p className="text-[10px] text-stone/50 font-mono">STL or OBJ</p>
+                        </div>
+                        <input type="file" className="hidden" accept=".stl,.obj" onChange={handleFileUpload} />
+                      </label>
+                    </div>
+                    {uploadedMesh && (
+                        <div className="space-y-3 p-3 bg-oak/5 rounded-lg border border-oak/10 animate-in fade-in zoom-in duration-300">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-oak uppercase tracking-wider">Mesh Controls</span>
+                            <button onClick={() => setUploadedMesh(null)} className="p-1 hover:bg-red-50 rounded text-stone hover:text-red-500">✕</button>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="text-[10px] text-stone/60 font-medium">Rotation X</label>
+                            <input type="range" min="0" max="360" value={uploadedMeshRotation.x} onChange={(e) => setUploadedMeshRotation({...uploadedMeshRotation, x: parseInt(e.target.value)})} className="w-full accent-charcoal" />
+                            <label className="text-[10px] text-stone/60 font-medium">Rotation Y</label>
+                            <input type="range" min="0" max="360" value={uploadedMeshRotation.y} onChange={(e) => setUploadedMeshRotation({...uploadedMeshRotation, y: parseInt(e.target.value)})} className="w-full accent-charcoal" />
+                            <label className="text-[10px] text-stone/60 font-medium">Scale</label>
+                            <input type="number" step="0.1" value={uploadedMeshScale} onChange={(e) => setUploadedMeshScale(parseFloat(e.target.value))} className="w-full px-2 py-1 text-xs rounded border border-stone/20" />
+                          </div>
+
+                          <button 
+                            disabled={isSlicing}
+                            onClick={handleApplySlicing} 
+                            className={`w-full px-4 py-2 rounded-lg transition-all text-xs font-bold shadow-sm ${isSlicing ? 'bg-stone/20 text-stone cursor-wait' : 'bg-charcoal text-white hover:bg-charcoal/90 hover:scale-[1.02]'}`}
+                          >
+                            {isSlicing ? 'Processing Mesh...' : 'Convert to Rybs'}
+                          </button>
+                        </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Unit Selection */}
+                <div className="bg-cream rounded-xl p-5 border border-stone/10 shadow-sm">
+                  <h3 className="text-xs font-bold text-stone/60 uppercase tracking-[0.1em] mb-3">Measurement System</h3>
+                  <div className="flex bg-stone/5 p-1 rounded-lg border border-stone/10">
+                    <button
+                      onClick={() => handleGlobalUnitChange('mm')}
+                      className={`flex-1 px-3 py-2 text-xs rounded-md transition-all font-medium ${globalUnit === 'mm' ? 'bg-white text-charcoal shadow-sm' : 'text-stone hover:text-charcoal'}`}
+                    >
+                      Metric (mm)
+                    </button>
+                    <button
+                      onClick={() => handleGlobalUnitChange('in')}
+                      className={`flex-1 px-3 py-2 text-xs rounded-md transition-all font-medium ${globalUnit === 'in' ? 'bg-white text-charcoal shadow-sm' : 'text-stone hover:text-charcoal'}`}
+                    >
+                      Imperial (in)
+                    </button>
+                  </div>
+                </div>
+              </aside>
+
+              <div className="lg:col-span-3 space-y-6">
 
             {/* Single Rib Preview */}
             <div className="mb-6">
@@ -1936,18 +2345,36 @@ function App() {
                     <h3 className="font-display text-base text-charcoal">Full Ryb Editor</h3>
                     <div className="flex items-center gap-2">
                       <div className="flex gap-1 bg-cream rounded-lg p-1">
+                        <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal" title="Toggle Theme">
+                          {theme === 'light' ? '🌙' : '☀️'}
+                        </button>
                         {(['3d', 'top', 'front', 'side'] as ViewMode[]).map((mode) => (
                           <button key={mode} onClick={() => setShelfViewMode(mode)} className={`px-3 py-1 text-xs rounded-md transition-all ${shelfViewMode === mode ? 'bg-charcoal text-cream' : 'text-stone hover:text-charcoal'}`}>
                             {mode === '3d' ? '3D' : mode.charAt(0).toUpperCase() + mode.slice(1)}
                           </button>
                         ))}
-                        <button onClick={() => setShelfViewMode('3d')} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1">↺</button>
+                        {/* Reset Camera Button */}
+                        <button onClick={() => { setShelfViewMode('3d'); /* Toggle to force re-position */ setTimeout(() => setShelfViewMode('3d'), 50); }} className="px-2 py-1 text-xs rounded-md transition-all text-stone hover:text-charcoal ml-1" title="Reset Camera">↺</button>
                       </div>
                       <button onClick={() => setExpandedShelfEditor(true)} className="px-2 py-1 text-xs rounded-md text-stone hover:text-charcoal hover:bg-cream transition-all" title="Expand editor">⤢</button>
                     </div>
                   </div>
-                  <Canvas camera={{ position: [800, 600, 1200], fov: 45, near: 1, far: 10000 }} className="flex-1 bg-gradient-to-b from-stone/5 to-stone/10 rounded-lg overflow-hidden relative" style={{ minHeight: '500px' }}>
-                    <Scene params={params} viewMode={shelfViewMode} freeformPoints={activeFreeformPoints} customRybSequence={customRybSequence} canvasId="shelf-canvas" siteConfig={siteConfig} enableOrbit={true} showGizmo={true} highlightIndex={selectedRibIndex} />
+                  <Canvas shadows camera={{ position: [2000, 2000, 2000], fov: 45, near: 0.1, far: 20000 }} className={`flex-1 rounded-lg overflow-hidden relative ${theme === 'dark' ? 'bg-[#2C2A26]' : 'bg-stone-100'}`} style={{ minHeight: '500px' }}>
+                    <Scene 
+                      params={params} 
+                      viewMode={shelfViewMode} 
+                      freeformPoints={activeFreeformPoints} 
+                      customRybSequence={customRybSequence} 
+                      canvasId="shelf-canvas" 
+                      siteConfig={siteConfig} 
+                      enableOrbit={true} 
+                      showGizmo={true} 
+                      highlightIndex={selectedRibIndex} 
+                      theme={theme}
+                      uploadedMesh={uploadedMesh}
+                      uploadedMeshRotation={uploadedMeshRotation}
+                      uploadedMeshScale={uploadedMeshScale}
+                    />
                   </Canvas>
                   <div className="mt-4 grid grid-cols-3 gap-3">
                     <div className="bg-charcoal text-cream p-3 text-center rounded-lg">
@@ -2046,6 +2473,19 @@ function App() {
                             <input type="range" min={0} max={100} step={2} value={params.backplaneOrganicOffset} onChange={(e) => handleParamChange('backplaneOrganicOffset', Number(e.target.value))} className="w-full accent-charcoal" />
                           </div>
                         )}
+                        {params.backplaneShape === 'organic' && (
+                          <div className="pt-4 border-t border-stone/10 mt-2 flex justify-between items-center">
+                            <button onClick={() => {
+                              if (!params.backplaneBezier) {
+                                const lengthMM = toMM(params.length)
+                                const h = (params.ribY.physical.value * params.ribY.factor) + (params.backplaneOrganicOffset * 2)
+                                const initialRyb = createRybFromWave(lengthMM, h, params.waveHeight, params.waveFrequency)
+                                handleParamChange('backplaneBezier', initialRyb)
+                              }
+                              setShowBackplaneEditor(true)
+                            }} className="w-full px-3 py-1.5 text-xs bg-oak/10 text-oak hover:bg-oak/20 rounded-md transition-all font-medium">Edit Backplane Curve</button>
+                          </div>
+                        )}
                         <div className="pt-2">
                           <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Material Thickness</span><span className="text-charcoal font-medium">{params.backplaneMaterialThickness}mm</span></label>
                           <input type="range" min={3} max={25} step={0.5} value={params.backplaneMaterialThickness} onChange={(e) => handleParamChange('backplaneMaterialThickness', Number(e.target.value))} className="w-full accent-charcoal" />
@@ -2066,7 +2506,9 @@ function App() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </div>
+    </section>
 
         {/* Price */}
         <section className="py-12 bg-charcoal text-cream">
@@ -2116,6 +2558,20 @@ function App() {
 
       {/* Freeform Drawer */}
       {showFreeformDrawer && <CustomRybEditor onSave={(points, sequence) => { setFreeformPoints(points); setCustomRybSequence(sequence); setShowFreeformDrawer(false) }} onClose={() => setShowFreeformDrawer(false)} />}
+      {showBackplaneEditor && (
+        <CustomRybEditor 
+          onSave={(points, sequence) => { 
+            // For the backplane, we only care about the first ryb in the sequence for now
+            // Or we treat the entire sequence as a series of keyframes?
+            // User requested "draw beziers" so we'll use the selected ryb's shape.
+            const selectedRyb = sequence.rybs[sequence.selectedIndex]
+            handleParamChange('backplaneBezier', selectedRyb)
+            setShowBackplaneEditor(false) 
+          }} 
+          onClose={() => setShowBackplaneEditor(false)} 
+          initialSequence={params.backplaneBezier ? { rybs: [params.backplaneBezier], selectedIndex: 0, spacingType: 'even', interpolation: 'linear' } : undefined}
+        />
+      )}
 
       {/* Expanded Single Ryb Editor Modal */}
       {expandedRibEditor && (
