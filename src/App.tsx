@@ -734,8 +734,8 @@ function ShelfMesh({ params, freeformPoints, customRybSequence, highlightIndex }
   const depthMM = toMM(params.ribZ.physical) * params.ribZ.factor
 
   const memoKey = useMemo(() =>
-    `${params.length.value}-${params.length.unit}-${params.height.value}-${params.height.unit}-${params.ribDepth.value}-${params.ribCount}-${params.waveHeight}-${params.waveFrequency}-${params.ribShape}-${params.ribX.physical.value}-${params.ribX.factor}-${params.ribY.physical.value}-${params.ribY.factor}-${params.ribZ.physical.value}-${params.ribZ.factor}-${params.ribRotateX}-${params.ribRotateY}-${params.ribRotateZ}-${params.flatEdge}-${params.sizeTransforms.map(t => `${t.scaleX}-${t.scaleY}`).join(',')}`,
-    [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, params.sizeTransforms]
+    `${params.length.value}-${params.length.unit}-${params.height.value}-${params.height.unit}-${params.ribDepth.value}-${params.ribCount}-${params.waveHeight}-${params.waveFrequency}-${params.ribShape}-${params.ribX.physical.value}-${params.ribX.factor}-${params.ribY.physical.value}-${params.ribY.factor}-${params.ribZ.physical.value}-${params.ribZ.factor}-${params.ribRotateX}-${params.ribRotateY}-${params.ribRotateZ}-${params.flatEdge}-${params.sizeTransforms.map(t => `${t.scaleX}-${t.scaleY}`).join(',')}-${params.backplaneBezier?.id || 'none'}`,
+    [params.length.value, params.length.unit, params.height.value, params.height.unit, params.ribDepth.value, params.ribCount, params.waveHeight, params.waveFrequency, params.ribShape, params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor, params.ribZ.physical.value, params.ribZ.factor, params.ribRotateX, params.ribRotateY, params.ribRotateZ, params.flatEdge, params.sizeTransforms, params.backplaneBezier]
   )
 
   const { positions, rotations, profiles } = useMemo(() => {
@@ -1048,8 +1048,7 @@ function getCurvePoints(segment: CurveSegment, resolution: number = 20): BezierC
   return points
 }
 
-function createRybFromWave(lengthMM: number, h: number, waveHeight: number, waveFrequency: number): CustomRyb {
-  const ribCount = 12
+function createRybFromWave(lengthMM: number, h: number, waveHeight: number, waveFrequency: number, ribCount: number): CustomRyb {
   const wavePath = generateWavePath(lengthMM, 0, waveHeight, waveFrequency, ribCount)
   
   const segments: CurveSegment[] = []
@@ -1111,17 +1110,27 @@ function getCustomRybHeightAtX(ryb: CustomRyb, x: number, lengthMM: number, defa
   // Normalize x from shelf space [-lengthMM/2, lengthMM/2] to editor canvas space [0, 500]
   const normalizedX = (x + lengthMM / 2) / (lengthMM || 1) * 500
   
-  // Find points on either side of normalizedX
-  const sorted = [...pts].sort((a, b) => a.x - b.x)
-  if (normalizedX <= sorted[0].x) return sorted[0].y
-  if (normalizedX >= sorted[sorted.length - 1].x) return sorted[sorted.length - 1].y
-  
-  for (let i = 0; i < sorted.length - 1; i++) {
-    if (normalizedX >= sorted[i].x && normalizedX <= sorted[i+1].x) {
-      const t = (normalizedX - sorted[i].x) / (sorted[i+1].x - sorted[i].x || 1)
-      return sorted[i].y + t * (sorted[i+1].y - sorted[i].y)
-    }
+  // Find all points at or near this X
+  const atX = pts.filter(p => Math.abs(p.x - normalizedX) < 5)
+  if (atX.length >= 2) {
+    const minY = Math.min(...atX.map(p => p.y))
+    const maxY = Math.max(...atX.map(p => p.y))
+    // Map editor canvas height [0, 300] back to physical height
+    // In our editor, a height of 200 units corresponds to a typical physical height
+    // Let's use the ratio to scale it correctly
+    return (maxY - minY)
   }
+
+  // Fallback: simple interpolation
+  const sorted = [...pts].sort((a, b) => a.x - b.x)
+  const left = sorted.filter(p => p.x <= normalizedX).pop()
+  const right = sorted.find(p => p.x >= normalizedX)
+  
+  if (left && right) {
+    const t = (normalizedX - left.x) / (right.x - left.x || 1)
+    return left.y + t * (right.y - left.y)
+  }
+  
   return defaultH
 }
 
@@ -2473,19 +2482,16 @@ function App() {
                             <input type="range" min={0} max={100} step={2} value={params.backplaneOrganicOffset} onChange={(e) => handleParamChange('backplaneOrganicOffset', Number(e.target.value))} className="w-full accent-charcoal" />
                           </div>
                         )}
-                        {params.backplaneShape === 'organic' && (
-                          <div className="pt-4 border-t border-stone/10 mt-2 flex justify-between items-center">
+                          <div className="pt-4 border-t border-stone/10 mt-2 space-y-2">
                             <button onClick={() => {
-                              if (!params.backplaneBezier) {
-                                const lengthMM = toMM(params.length)
-                                const h = (params.ribY.physical.value * params.ribY.factor) + (params.backplaneOrganicOffset * 2)
-                                const initialRyb = createRybFromWave(lengthMM, h, params.waveHeight, params.waveFrequency)
-                                handleParamChange('backplaneBezier', initialRyb)
-                              }
+                              const lengthMM = toMM(params.length)
+                              const h = (params.ribY.physical.value * params.ribY.factor) + (params.backplaneOrganicOffset * 2)
+                              const syncRyb = createRybFromWave(lengthMM, h, params.waveHeight, params.waveFrequency, params.ribCount)
+                              handleParamChange('backplaneBezier', syncRyb)
                               setShowBackplaneEditor(true)
-                            }} className="w-full px-3 py-1.5 text-xs bg-oak/10 text-oak hover:bg-oak/20 rounded-md transition-all font-medium">Edit Backplane Curve</button>
+                            }} className="w-full px-3 py-1.5 text-xs bg-oak text-cream hover:bg-oak-dark rounded-md transition-all font-medium shadow-sm">Sync & Edit Backplane</button>
+                            <button onClick={() => setShowBackplaneEditor(true)} className="w-full px-3 py-1.5 text-xs bg-oak/10 text-oak hover:bg-oak/20 rounded-md transition-all font-medium">Open Editor</button>
                           </div>
-                        )}
                         <div className="pt-2">
                           <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Material Thickness</span><span className="text-charcoal font-medium">{params.backplaneMaterialThickness}mm</span></label>
                           <input type="range" min={3} max={25} step={0.5} value={params.backplaneMaterialThickness} onChange={(e) => handleParamChange('backplaneMaterialThickness', Number(e.target.value))} className="w-full accent-charcoal" />
