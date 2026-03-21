@@ -1112,9 +1112,7 @@ function getCustomRybHeightAtX(ryb: CustomRyb, x: number, lengthMM: number, defa
     const minY = Math.min(...atX.map(p => p.y))
     const maxY = Math.max(...atX.map(p => p.y))
     // Map editor canvas height [0, 300] back to physical height
-    // In our editor, a height of 200 units corresponds to a typical physical height
-    // Let's use the ratio to scale it correctly
-    return (maxY - minY)
+    return ((maxY - minY) / 300) * defaultH
   }
 
   // Fallback: simple interpolation
@@ -1124,7 +1122,8 @@ function getCustomRybHeightAtX(ryb: CustomRyb, x: number, lengthMM: number, defa
   
   if (left && right) {
     const t = (normalizedX - left.x) / (right.x - left.x || 1)
-    return left.y + t * (right.y - left.y)
+    const yVal = left.y + t * (right.y - left.y)
+    return (yVal / 300) * defaultH
   }
   
   return defaultH
@@ -1885,7 +1884,7 @@ function App() {
       const x = center.x - size.x/2 + t * size.x
       
       const segments: CurveSegment[] = []
-      const resolution = 12 // Number of samples across depth
+      const resolution = 64 // Increased from 12 to 64 for high-fidelity slice detection
       const topPts: {x: number, y: number}[] = []
       const bottomPts: {x: number, y: number}[] = []
       
