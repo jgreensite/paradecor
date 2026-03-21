@@ -1153,17 +1153,40 @@ function CustomRybEditor({ initialPoints, initialSequence, onSave, onClose }: Cu
 
   const currentRyb = sequence.rybs[sequence.selectedIndex]
 
-  const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const getPointerPos = (e: React.MouseEvent | React.TouchEvent) => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) return null
     const rect = canvas.getBoundingClientRect()
     const scaleX = canvas.width / rect.width
     const scaleY = canvas.height / rect.height
-    const x = (e.clientX - rect.left) * scaleX
-    const y = (e.clientY - rect.top) * scaleY
+    
+    let clientX, clientY;
+    if ('touches' in e) {
+      if (e.touches.length > 0) {
+        clientX = e.touches[0].clientX
+        clientY = e.touches[0].clientY
+      } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX
+        clientY = e.changedTouches[0].clientY
+      } else return null
+    } else {
+      clientX = e.clientX
+      clientY = e.clientY
+    }
+    
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY
+    }
+  }
+
+  const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+    const pos = getPointerPos(e)
+    if (!pos) return
+    const { x, y } = pos
 
     const ryb = sequence.rybs[sequence.selectedIndex]
-    let closestDist = 20
+    let closestDist = 30 // Increased for mobile touch target
     let closest: { rybIndex: number, segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2' } | null = null
 
     ryb.segments.forEach((seg, segIdx) => {
@@ -1214,14 +1237,10 @@ function CustomRybEditor({ initialPoints, initialSequence, onSave, onClose }: Cu
     }
   }
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    const x = (e.clientX - rect.left) * scaleX
-    const y = (e.clientY - rect.top) * scaleY
+  const handlePointerMove = (e: React.MouseEvent | React.TouchEvent) => {
+    const pos = getPointerPos(e)
+    if (!pos) return
+    const { x, y } = pos
 
     if (selectedPoint && dragging) {
       const newRybs = [...sequence.rybs]
@@ -1239,7 +1258,7 @@ function CustomRybEditor({ initialPoints, initialSequence, onSave, onClose }: Cu
     } else {
       // Hover detection
       const ryb = sequence.rybs[sequence.selectedIndex]
-      let closestDist = 20
+      let closestDist = 30 // Increased for mobile touch target
       let closest: { segmentIndex: number, pointType: 'start' | 'end' | 'control1' | 'control2' } | null = null
       ryb.segments.forEach((seg, segIdx) => {
         const checkPt = (pt: BezierControlPoint, type: 'start' | 'end' | 'control1' | 'control2') => {
@@ -1256,6 +1275,10 @@ function CustomRybEditor({ initialPoints, initialSequence, onSave, onClose }: Cu
       })
       setHoveredPoint(closest)
     }
+  }
+
+  const handlePointerUp = () => {
+    setDragging(false)
   }
 
   const addRyb = () => {
@@ -1534,32 +1557,22 @@ function CustomRybEditor({ initialPoints, initialSequence, onSave, onClose }: Cu
           )}
         </div>
 
-        <div className="flex gap-1 mb-3 flex-wrap">
-          {currentRyb.segments.map((seg, segIdx) => (
-            <div key={segIdx} className="flex items-center gap-1">
-              <button
-                onClick={() => toggleSegmentType(segIdx)}
-                className={`px-2 py-1 text-xs rounded transition-all ${seg.type === 'bezier' ? 'bg-oak/30 text-charcoal' : 'bg-stone/10 text-charcoal hover:bg-stone/20'}`}
-                title={`Segment ${segIdx + 1}: Click to toggle line/bezier`}
-              >
-                S{segIdx + 1}: {seg.type === 'bezier' ? '◠ Bezier' : '— Line'}
-              </button>
-              {currentRyb.segments.length > 1 && (
-                <button onClick={() => deleteSegment(segIdx)} className="px-1 py-1 text-xs text-red-500 hover:text-red-700" title="Delete segment">✕</button>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Segment list UI removed per Epic 22 - Direct 3D Interaction */}
 
         <canvas
           ref={canvasRef}
           width={500}
           height={300}
           className="w-full border border-stone/20 rounded-lg bg-white"
-          onMouseDown={handleCanvasMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={() => { setDragging(false) }}
-          onMouseLeave={() => { setDragging(false) }}
+          style={{ touchAction: 'none' }}
+          onMouseDown={handlePointerDown}
+          onMouseMove={handlePointerMove}
+          onMouseUp={handlePointerUp}
+          onMouseLeave={handlePointerUp}
+          onTouchStart={handlePointerDown}
+          onTouchMove={handlePointerMove}
+          onTouchEnd={handlePointerUp}
+          onTouchCancel={handlePointerUp}
         />
 
         <div className="grid grid-cols-3 gap-4 mt-4">
@@ -1737,7 +1750,7 @@ function App() {
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
   const [showBackplaneEditor, setShowBackplaneEditor] = useState(false)
   const [uploadedMesh, setUploadedMesh] = useState<THREE.Mesh | null>(null)
-  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: 180, y: -90, z: 0 })
+  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: -90, y: 0, z: 0 })
   const [uploadedMeshScale, setUploadedMeshScale] = useState(1.0)
   const [isSlicing, setIsSlicing] = useState(false)
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
@@ -1756,12 +1769,24 @@ function App() {
       const extension = file.name.split('.').pop()?.toLowerCase()
       
       try {
+        const prepareMesh = (mesh: THREE.Mesh) => {
+          mesh.material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
+          
+          // Auto-scale to fit the preview box (target radius ~100-150 units)
+          mesh.geometry.computeBoundingSphere()
+          const radius = mesh.geometry.boundingSphere?.radius || 100
+          const scaleTarget = 120 / (radius || 1)
+          
+          setUploadedMeshScale(parseFloat(scaleTarget.toFixed(3)))
+          // Default to Z-Up conversion rotation for CNC files: -90x, 0y, 0z
+          setUploadedMeshRotation({ x: -90, y: 0, z: 0 })
+          setUploadedMesh(mesh)
+        }
+
         if (extension === 'stl') {
           const loader = new STLLoader()
           const geometry = loader.parse(contents as ArrayBuffer)
-          const material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
-          const mesh = new THREE.Mesh(geometry, material)
-          setUploadedMesh(mesh)
+          prepareMesh(new THREE.Mesh(geometry))
         } else if (extension === 'obj') {
           const loader = new OBJLoader()
           const object = loader.parse(contents as string)
@@ -1770,8 +1795,7 @@ function App() {
             if (child.isMesh) mesh = child as THREE.Mesh
           })
           if (mesh) {
-            (mesh as THREE.Mesh).material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
-            setUploadedMesh(mesh)
+            prepareMesh(mesh)
           }
         }
       } catch (err) {
