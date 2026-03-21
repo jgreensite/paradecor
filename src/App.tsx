@@ -1748,8 +1748,17 @@ function App() {
   const [showExport, setShowExport] = useState(false)
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
   const [showBackplaneEditor, setShowBackplaneEditor] = useState(false)
+  
+  const [showUploadPreview, setShowUploadPreview] = useState(false)
+  const [stagedUploadMesh, setStagedUploadMesh] = useState<THREE.Mesh | null>(null)
+  const [previewTransform, setPreviewTransform] = useState({
+    rotation: { x: 0, y: 90, z: 0 },
+    position: { x: 0, y: 0, z: 0 },
+    scale: 1.0
+  })
+
   const [uploadedMesh, setUploadedMesh] = useState<THREE.Mesh | null>(null)
-  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: 0, y: 90, z: 0 })
+  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: 0, y: 0, z: 0 })
   const [uploadedMeshScale, setUploadedMeshScale] = useState(1.0)
   const [isSlicing, setIsSlicing] = useState(false)
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
@@ -1771,7 +1780,7 @@ function App() {
         const prepareMesh = (mesh: THREE.Mesh) => {
           mesh.material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
           
-          // Center the geometry so it aligns with the generated Rybs in the generic 3D viewport
+          // Center the geometry so it aligns cleanly in the generic 3D preview viewport natively
           mesh.geometry.computeBoundingBox()
           const center = new THREE.Vector3()
           mesh.geometry.boundingBox?.getCenter(center)
@@ -1782,10 +1791,13 @@ function App() {
           const radius = mesh.geometry.boundingSphere?.radius || 100
           const scaleTarget = 120 / (radius || 1)
           
-          setUploadedMeshScale(parseFloat(scaleTarget.toFixed(3)))
-          // Default to Z-Up conversion rotation for CNC files: 0x, 90y, 0z
-          setUploadedMeshRotation({ x: 0, y: 90, z: 0 })
-          setUploadedMesh(mesh)
+          setPreviewTransform({
+            rotation: { x: 0, y: 90, z: 0 },
+            position: { x: 0, y: 0, z: 0 },
+            scale: parseFloat(scaleTarget.toFixed(3))
+          })
+          setStagedUploadMesh(mesh)
+          setShowUploadPreview(true)
         }
 
         if (extension === 'stl') {
@@ -1816,15 +1828,18 @@ function App() {
     }
   }
 
-  const handleApplySlicing = () => {
-    if (!uploadedMesh) return
+  const handleApplySlicing = (overrideMesh?: THREE.Mesh | React.MouseEvent) => {
+    const isMesh = overrideMesh && 'isMesh' in (overrideMesh as any)
+    const meshToSlice = (isMesh ? overrideMesh as THREE.Mesh : uploadedMesh)
+    if (!meshToSlice) return
     setIsSlicing(true)
     
     // Move heavy computation to a macrotask to keep UI responsive
     setTimeout(() => {
       try {
+        const { sequence, bounds } = sliceMeshToRybs(meshToSlice, params)
         // Create a temporary geometry with the user's rotation and scale applied
-        const geom = uploadedMesh.geometry.clone()
+        const geom = meshToSlice.geometry.clone()
         geom.scale(uploadedMeshScale, uploadedMeshScale, uploadedMeshScale)
         
         const euler = new THREE.Euler(
@@ -1835,7 +1850,7 @@ function App() {
         const matrix = new THREE.Matrix4().makeRotationFromEuler(euler)
         geom.applyMatrix4(matrix)
         
-        const tempMesh = new THREE.Mesh(geom, uploadedMesh.material)
+        const tempMesh = new THREE.Mesh(geom, meshToSlice.material)
         tempMesh.updateMatrixWorld(true)
 
         const result = sliceMeshToRybs(tempMesh, params)
