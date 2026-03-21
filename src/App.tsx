@@ -1749,7 +1749,7 @@ function App() {
   const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
   const [showBackplaneEditor, setShowBackplaneEditor] = useState(false)
   const [uploadedMesh, setUploadedMesh] = useState<THREE.Mesh | null>(null)
-  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: -90, y: 0, z: 0 })
+  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: 0, y: 90, z: 0 })
   const [uploadedMeshScale, setUploadedMeshScale] = useState(1.0)
   const [isSlicing, setIsSlicing] = useState(false)
   const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
@@ -1771,14 +1771,20 @@ function App() {
         const prepareMesh = (mesh: THREE.Mesh) => {
           mesh.material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
           
+          // Center the geometry so it aligns with the generated Rybs in the generic 3D viewport
+          mesh.geometry.computeBoundingBox()
+          const center = new THREE.Vector3()
+          mesh.geometry.boundingBox?.getCenter(center)
+          mesh.geometry.translate(-center.x, -center.y, -center.z)
+
           // Auto-scale to fit the preview box (target radius ~100-150 units)
           mesh.geometry.computeBoundingSphere()
           const radius = mesh.geometry.boundingSphere?.radius || 100
           const scaleTarget = 120 / (radius || 1)
           
           setUploadedMeshScale(parseFloat(scaleTarget.toFixed(3)))
-          // Default to Z-Up conversion rotation for CNC files: -90x, 0y, 0z
-          setUploadedMeshRotation({ x: -90, y: 0, z: 0 })
+          // Default to Z-Up conversion rotation for CNC files: 0x, 90y, 0z
+          setUploadedMeshRotation({ x: 0, y: 90, z: 0 })
           setUploadedMesh(mesh)
         }
 
@@ -1922,11 +1928,11 @@ function App() {
           for(let k=bottomPts.length-1; k>0; k--) segments.push({type:'line', start: bottomPts[k], end: bottomPts[k-1]})
           segments.push({type:'line', start: bottomPts[0], end: topPts[0]})
       } else {
-        // Fallback for empty slice
-        segments.push({type:'line', start:{x:50,y:140}, end:{x:450,y:140}})
-        segments.push({type:'line', start:{x:450,y:140}, end:{x:450,y:160}})
-        segments.push({type:'line', start:{x:450,y:160}, end:{x:50,y:160}})
-        segments.push({type:'line', start:{x:50,y:160}, end:{x:50,y:140}})
+        // Fallback for empty slice: make a tiny 1x1 px dot in the center to remain invisible but valid
+        segments.push({type:'line', start:{x:250,y:150}, end:{x:251,y:150}})
+        segments.push({type:'line', start:{x:251,y:150}, end:{x:251,y:151}})
+        segments.push({type:'line', start:{x:251,y:151}, end:{x:250,y:151}})
+        segments.push({type:'line', start:{x:250,y:151}, end:{x:250,y:150}})
       }
       
       rybs.push({
