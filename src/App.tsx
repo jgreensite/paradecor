@@ -294,16 +294,12 @@ function generateRibGeometry(
     }
 
   } else if (shape === 'freeform' && freeformPoints && freeformPoints.length > 2) {
-    const minX = Math.min(...freeformPoints.map(p => p.x))
-    const maxX = Math.max(...freeformPoints.map(p => p.x))
-    const minY = Math.min(...freeformPoints.map(p => p.y))
-    const maxY = Math.max(...freeformPoints.map(p => p.y))
-    const rangeX = maxX - minX || 1
-    const rangeY = maxY - minY || 1
-
+    // Map absolute 500x300 canvas coordinates directly to physical width/height.
+    // X [0, 500] maps to [-widthMM/2, widthMM/2]
+    // Y [0, 300] maps to [heightMM/2, -heightMM/2] (Inverting Y since canvas 0 is top, 3D +Y is up)
     const scaledPoints = freeformPoints.map(p => ({
-      x: ((p.x - minX) / rangeX - 0.5) * widthMM,
-      y: ((p.y - minY) / rangeY - 0.5) * heightMM,
+      x: (p.x / 500 - 0.5) * widthMM,
+      y: (0.5 - p.y / 300) * heightMM,
     }))
 
     const zF = flatEdge ? depthMM : depthMM / 2
@@ -380,7 +376,7 @@ function generateAllRibParams(params: ShelfParams, wavePath: { x: number, y: num
     let scaledHeight = baseY * transform.scaleY
 
     // Apply backplane bezier stretching if enabled
-    if (params.backplaneBezier) {
+    if (params.backplaneEnabled && params.backplaneBezier) {
       const lengthMM = toMM(params.length)
       const bpH = getCustomRybHeightAtX(params.backplaneBezier, wavePath[i].x, lengthMM, scaledHeight)
       scaledHeight = bpH + (params.backplaneOrganicOffset * 0.5) // Stretch to fit backplane + some clearance
@@ -1798,10 +1794,38 @@ function App() {
     // Move heavy computation to a macrotask to keep UI responsive
     setTimeout(() => {
       try {
-        const sequence = sliceMeshToRybs(uploadedMesh, params)
-        setCustomRybSequence(sequence)
+        // Create a temporary geometry with the user's rotation and scale applied
+        const geom = uploadedMesh.geometry.clone()
+        geom.scale(uploadedMeshScale, uploadedMeshScale, uploadedMeshScale)
+        
+        const euler = new THREE.Euler(
+          THREE.MathUtils.degToRad(uploadedMeshRotation.x),
+          THREE.MathUtils.degToRad(uploadedMeshRotation.y),
+          THREE.MathUtils.degToRad(uploadedMeshRotation.z)
+        )
+        const matrix = new THREE.Matrix4().makeRotationFromEuler(euler)
+        geom.applyMatrix4(matrix)
+        
+        const tempMesh = new THREE.Mesh(geom, uploadedMesh.material)
+        tempMesh.updateMatrixWorld(true)
+
+        const result = sliceMeshToRybs(tempMesh, params)
+
+        // Update global params to match the mesh's physical dimensions precisely
+        handleParamChange('length', { value: Math.round(result.bounds.x), unit: 'mm' })
+        handleParamChange('height', { value: Math.round(result.bounds.y), unit: 'mm' })
+        // ribX = depth/width of ryb = bounds.z. ribY = height of ryb = bounds.y
+        handleParamChange('ribX', { ...params.ribX, physical: { value: Math.round(result.bounds.z), unit: 'mm' } })
+        handleParamChange('ribY', { ...params.ribY, physical: { value: Math.round(result.bounds.y), unit: 'mm' } })
+        
+        // Remove parametric distortions so the true mesh shape is preserved
+        handleParamChange('waveHeight', 0)
+        handleParamChange('backplaneEnabled', false)
+        handleParamChange('sizeTransforms', [])
+        
+        setCustomRybSequence(result.sequence)
         handleParamChange('ribShape', 'freeform')
-        alert(`Successfully converted 3D mesh into ${sequence.rybs.length} ribs.`)
+        alert(`Successfully converted 3D mesh into ${result.sequence.rybs.length} ribs.`)
       } catch (err) {
         console.error('Slicing error:', err)
         alert('Error slicing mesh. Please try a simpler model.')
@@ -1811,7 +1835,7 @@ function App() {
     }, 100)
   }
 
-  function sliceMeshToRybs(mesh: THREE.Mesh, params: ShelfParams): CustomRybSequence {
+  function sliceMeshToRybs(mesh: THREE.Mesh, params: ShelfParams): { sequence: CustomRybSequence, bounds: THREE.Vector3 } {
     const ribCount = params.ribCount
     const rybs: CustomRyb[] = []
     
@@ -1823,6 +1847,14 @@ function App() {
     bbox.getCenter(center)
     
     const raycaster = new THREE.Raycaster()
+    
+    // We want the mesh points to fit inside the canvas, preserving true aspect ratio.
+    // Z is mapped to canvas width (500). Y is mapped to canvas height (300).
+    // Scale uniformly based on the most constraining dimension.
+    const scale = Math.min(500 / (size.z || 1), 300 / (size.y || 1))
+    
+    const offsetX = 250 // Center of 500
+    const offsetY = 150 // Center of 300
     
     for (let i = 0; i < ribCount; i++) {
       const t = i / (ribCount - 1 || 1)
@@ -1846,13 +1878,15 @@ function App() {
           const intersectsBottom = raycaster.intersectObject(mesh)
           
           if (intersectsTop.length > 0 && intersectsBottom.length > 0) {
-              // Map 3D mesh local space to 500x300 editor canvas space
-              const canvasX = tz * 400 + 50
-              const normTopY = (intersectsTop[0].point.y - center.y) / (size.y || 1)
-              const normBottomY = (intersectsBottom[0].point.y - center.y) / (size.y || 1)
+              const localZ = intersectsTop[0].point.z - center.z
+              const localTopY = intersectsTop[0].point.y - center.y
+              const localBottomY = intersectsBottom[0].point.y - center.y
               
-              const canvasTopY = 150 - normTopY * 100
-              const canvasBottomY = 150 - normBottomY * 100
+              // Map to canvas preserving uniform scaling
+              // 3D Y is up, Canvas Y is down
+              const canvasX = offsetX + localZ * scale
+              const canvasTopY = offsetY - localTopY * scale
+              const canvasBottomY = offsetY - localBottomY * scale
               
               topPts.push({x: canvasX, y: canvasTopY})
               bottomPts.push({x: canvasX, y: canvasBottomY})
@@ -1882,11 +1916,14 @@ function App() {
     }
     
     return {
-      rybs,
-      selectedIndex: 0,
-      spacingType: 'even',
-      interpolation: 'linear'
-    } as CustomRybSequence
+      sequence: {
+        rybs,
+        spacingType: 'even',
+        interpolation: 'linear',
+        selectedIndex: 0
+      },
+      bounds: size
+    }
   }
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [cyclingRybIndex, setCyclingRybIndex] = useState(0)
