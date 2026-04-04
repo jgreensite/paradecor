@@ -1,100 +1,26 @@
 import { useState, useMemo, useRef, useEffect, useCallback, Suspense } from 'react'
 import { Canvas, useThree, useFrame } from '@react-three/fiber'
 import { OrbitControls, OrthographicCamera, Float, GizmoHelper, GizmoViewport, Text } from '@react-three/drei'
-import { SignInButton, UserButton, useUser } from '@clerk/react'
+import { useDependencies } from './context/DependencyContext'
 import * as THREE from 'three'
 // @ts-ignore
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 // @ts-ignore
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader'
-import makerjs from 'makerjs'
-import { createSlotWithDogbone, createBackplaneOutline, generateCncLayout } from './backplane'
+import { ExportService } from './core/services/ExportService'
+import { createSlotWithDogbone, createBackplaneOutline, generateCncLayout } from './core/domain/geometry'
+import type {
+  Unit, ViewMode, RibShape,
+  DimensionUnit, AxisDimension, RibSizeTransform,
+  ShelfParams, FreeformRibPoint,
+  CurveType, BezierControlPoint, CurveSegment,
+  CustomRyb, CustomRybSequence
+} from './core/domain/types'
+import { useDesignerState } from './hooks/useDesignerState'
+import { useUploadMesh } from './hooks/useUploadMesh'
+import { useCustomRybSequence } from './hooks/useCustomRybSequence'
 
-type Unit = 'in' | 'mm'
-type ViewMode = '3d' | 'top' | 'front' | 'side'
-type RibShape = 'square' | 'circle' | 'rectangle' | 'freeform'
-
-interface DimensionUnit {
-  value: number
-  unit: Unit
-}
-
-interface RibSizeTransform {
-  position: number
-  scaleX: number
-  scaleY: number
-  rotation: number
-}
-
-interface AxisDimension {
-  physical: DimensionUnit
-  factor: number
-}
-
-interface ShelfParams {
-  length: DimensionUnit
-  height: DimensionUnit
-  ribDepth: DimensionUnit
-  materialThickness: DimensionUnit
-  ribCount: number
-  waveHeight: number
-  waveFrequency: number
-  ribShape: RibShape
-  ribSize: DimensionUnit
-  ribX: AxisDimension
-  ribY: AxisDimension
-  ribZ: AxisDimension
-  ribRotateX: number
-  ribRotateY: number
-  ribRotateZ: number
-  sizeTransforms: RibSizeTransform[]
-  flatEdge: boolean
-  backplaneEnabled: boolean
-  backplaneShape: 'rectangular' | 'organic'
-  backplaneOrganicOffset: number
-  backplaneMaterialThickness: number
-  backplaneSlotDepth: number
-  backplaneDogboneRadius: number
-  material: string
-  finish: string
-  backplaneBezier?: CustomRyb | null
-}
-
-interface FreeformRibPoint {
-  x: number
-  y: number
-}
-
-type CurveType = 'line' | 'bezier'
-
-interface BezierControlPoint {
-  x: number
-  y: number
-}
-
-interface CurveSegment {
-  type: CurveType
-  start: BezierControlPoint
-  end: BezierControlPoint
-  control1?: BezierControlPoint
-  control2?: BezierControlPoint
-}
-
-interface CustomRyb {
-  id: string
-  name: string
-  index: number
-  segments: CurveSegment[]
-  depth: number
-}
-
-interface CustomRybSequence {
-  rybs: CustomRyb[]
-  spacingType: 'even' | 'custom'
-  customSpacing?: number
-  interpolation: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out'
-  selectedIndex: number
-}
+// Types are imported from src/core/domain/types.ts — do not re-declare here.
 
 const MATERIALS = [
   { id: 'mdf', name: 'Premium MDF', price: 45, color: '#E8E4DC', roughness: 0.8 },
@@ -1683,301 +1609,64 @@ function DeveloperConfig({ config, onChange }: { config: typeof INITIAL_SITE_CON
 }
 
 function App() {
-  const { user } = useUser()
-  const isAdmin = user?.publicMetadata?.role === 'admin'
+  const { auth, payment } = useDependencies()
+  const { user } = auth.useAuthUser()
+  const { SignInButton, UserButton } = auth
+  const isAdmin = user?.roles?.includes('admin') ?? false
   const [siteConfig, setSiteConfig] = useState(INITIAL_SITE_CONFIG)
-  const [globalUnit, setGlobalUnit] = useState<Unit>('mm')
 
-  const handleGlobalUnitChange = (newUnit: Unit) => {
-    if (globalUnit === newUnit) return;
-    setGlobalUnit(newUnit)
-    const convert = (dim: DimensionUnit): DimensionUnit => {
-      if (dim.unit === newUnit) return dim;
-      return {
-        value: newUnit === 'mm' ? dim.value * MM_PER_INCH : dim.value / MM_PER_INCH,
-        unit: newUnit
-      };
-    }
-    setParams(prev => ({
-      ...prev,
-      length: convert(prev.length),
-      height: convert(prev.height),
-      ribDepth: convert(prev.ribDepth),
-      materialThickness: convert(prev.materialThickness),
-      ribSize: convert(prev.ribSize),
-      ribX: { ...prev.ribX, physical: convert(prev.ribX.physical) },
-      ribY: { ...prev.ribY, physical: convert(prev.ribY.physical) },
-      ribZ: { ...prev.ribZ, physical: convert(prev.ribZ.physical) },
-    }))
-  }
-
-  const [params, setParams] = useState<ShelfParams>({
-    length: { value: 48, unit: 'in' },
-    height: { value: 24, unit: 'in' },
-    ribDepth: { value: 8, unit: 'in' },
-    materialThickness: { value: 0.75, unit: 'in' },
-    ribCount: 10,
-    waveHeight: 2,
-    waveFrequency: 1.5,
-    ribShape: 'square',
-    ribSize: { value: 150, unit: 'mm' },
-    ribX: createAxisDimension(150, 'mm'),
-    ribY: createAxisDimension(150, 'mm'),
-    ribZ: createAxisDimension(10, 'mm'),
-    ribRotateX: 180,
-    ribRotateY: -90,
-    ribRotateZ: 0,
-    sizeTransforms: [],
-    flatEdge: true,
-    backplaneEnabled: true,
-    backplaneShape: 'rectangular',
-    backplaneOrganicOffset: 20,
-    backplaneMaterialThickness: 12,
-    backplaneSlotDepth: 60,
-    backplaneDogboneRadius: 3.5,
-    material: 'birch-plywood',
-    finish: 'raw',
-    backplaneBezier: null,
-  })
+  // ── Designer state (RYB-112) — params, unit, calculations, and all handlers ──
+  const {
+    globalUnit,
+    params,
+    activePreset,
+    calculations,
+    handleParamChange,
+    handleGlobalUnitChange,
+    handlePresetClick,
+    handleRibXPhysicalChange,
+    handleRibXFactorChange,
+    handleRibYPhysicalChange,
+    handleRibYFactorChange,
+    handleRibZPhysicalChange,
+    handleRibZFactorChange,
+  } = useDesignerState()
 
   const [activeSection, setActiveSection] = useState('design')
-  const [activePreset, setActivePreset] = useState('gentle')
   const [ribViewMode, setRibViewMode] = useState<ViewMode>('3d')
   const [shelfViewMode, setShelfViewMode] = useState<ViewMode>('3d')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [showExport, setShowExport] = useState(false)
-  const [showFreeformDrawer, setShowFreeformDrawer] = useState(false)
   const [showBackplaneEditor, setShowBackplaneEditor] = useState(false)
   
-  const [showUploadPreview, setShowUploadPreview] = useState(false)
-  const [stagedUploadMesh, setStagedUploadMesh] = useState<THREE.Mesh | null>(null)
-  const [previewTransform, setPreviewTransform] = useState({
-    rotation: { x: 0, y: 90, z: 0 },
-    position: { x: 0, y: 0, z: 0 },
-    scale: 1.0
-  })
+  const {
+    showUploadPreview, setShowUploadPreview,
+    stagedUploadMesh, setStagedUploadMesh,
+    previewTransform, setPreviewTransform,
+    uploadedMesh, setUploadedMesh,
+    uploadedMeshRotation, setUploadedMeshRotation,
+    uploadedMeshScale, setUploadedMeshScale,
+    isSlicing, setIsSlicing, handleFileUpload, handleApplySlicing
+  } = useUploadMesh(params, handleParamChange)
 
-  const [uploadedMesh, setUploadedMesh] = useState<THREE.Mesh | null>(null)
-  const [uploadedMeshRotation, setUploadedMeshRotation] = useState({ x: 0, y: 0, z: 0 })
-  const [uploadedMeshScale, setUploadedMeshScale] = useState(1.0)
-  const [isSlicing, setIsSlicing] = useState(false)
-  const [freeformPoints, setFreeformPoints] = useState<FreeformRibPoint[]>([])
-  const [customRybSequence, setCustomRybSequence] = useState<CustomRybSequence | null>(null)
+  const {
+    freeformPoints, setFreeformPoints,
+    customRybSequence, setCustomRybSequence,
+    showFreeformDrawer, setShowFreeformDrawer,
+    activeFreeformPoints, handleResetRyb, handleResetAllRybs
+  } = useCustomRybSequence(handleParamChange)
+
   const [isExporting, setIsExporting] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [successEmail, setSuccessEmail] = useState<string | null>(null)
   
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Allow re-uploading the exact same file in case the user cancels it and tries again
-    e.target.value = ''
-    
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const contents = event.target?.result
-      if (!contents) return
-      
-      const extension = file.name.split('.').pop()?.toLowerCase()
-      
-      try {
-        const prepareMesh = (mesh: THREE.Mesh) => {
-          mesh.material = new THREE.MeshStandardMaterial({ color: 0x8b5a3c, transparent: true, opacity: 0.5 })
-          
-          // Center the geometry so it aligns cleanly in the generic 3D preview viewport natively
-          mesh.geometry.computeBoundingBox()
-          const center = new THREE.Vector3()
-          mesh.geometry.boundingBox?.getCenter(center)
-          mesh.geometry.translate(-center.x, -center.y, -center.z)
-
-          // Auto-scale to fit the preview box (target radius ~100-150 units)
-          mesh.geometry.computeBoundingSphere()
-          const radius = mesh.geometry.boundingSphere?.radius || 100
-          const scaleTarget = 120 / (radius || 1)
-          
-          setPreviewTransform({
-            rotation: { x: 0, y: 90, z: 0 },
-            position: { x: 0, y: 0, z: 0 },
-            scale: parseFloat(scaleTarget.toFixed(3))
-          })
-          setStagedUploadMesh(mesh)
-          setShowUploadPreview(true)
-        }
-
-        if (extension === 'stl') {
-          const loader = new STLLoader()
-          const geometry = loader.parse(contents as ArrayBuffer)
-          prepareMesh(new THREE.Mesh(geometry))
-        } else if (extension === 'obj') {
-          const loader = new OBJLoader()
-          const object = loader.parse(contents as string)
-          let mesh: THREE.Mesh | null = null
-          object.traverse((child: any) => {
-            if (child.isMesh) mesh = child as THREE.Mesh
-          })
-          if (mesh) {
-            prepareMesh(mesh)
-          }
-        }
-      } catch (err) {
-        console.error('Error loading mesh:', err)
-        alert('Failed to load 3D mesh. Please ensure it is a valid STL or OBJ file.')
-      }
-    }
-    
-    if (file.name.endsWith('.stl')) {
-      reader.readAsArrayBuffer(file)
-    } else {
-      reader.readAsText(file)
-    }
-  }
-
-  const handleApplySlicing = (overrideMesh?: THREE.Mesh | React.MouseEvent) => {
-    const isMesh = overrideMesh && 'isMesh' in (overrideMesh as any)
-    const meshToSlice = (isMesh ? overrideMesh as THREE.Mesh : uploadedMesh)
-    if (!meshToSlice) return
-    setIsSlicing(true)
-    
-    // Move heavy computation to a macrotask to keep UI responsive
-    setTimeout(() => {
-      try {
-        const { sequence, bounds } = sliceMeshToRybs(meshToSlice, params)
-        // Create a temporary geometry with the user's rotation and scale applied
-        const geom = meshToSlice.geometry.clone()
-        geom.scale(uploadedMeshScale, uploadedMeshScale, uploadedMeshScale)
-        
-        const euler = new THREE.Euler(
-          THREE.MathUtils.degToRad(uploadedMeshRotation.x),
-          THREE.MathUtils.degToRad(uploadedMeshRotation.y),
-          THREE.MathUtils.degToRad(uploadedMeshRotation.z)
-        )
-        const matrix = new THREE.Matrix4().makeRotationFromEuler(euler)
-        geom.applyMatrix4(matrix)
-        
-        const tempMesh = new THREE.Mesh(geom, meshToSlice.material)
-        tempMesh.updateMatrixWorld(true)
-
-        const result = sliceMeshToRybs(tempMesh, params)
-
-        // Update global params to match the mesh's physical dimensions precisely
-        handleParamChange('length', { value: Math.round(result.bounds.x), unit: 'mm' })
-        handleParamChange('height', { value: Math.round(result.bounds.y), unit: 'mm' })
-        // ribX = depth/width of ryb = bounds.z. ribY = height of ryb = bounds.y
-        handleParamChange('ribX', { ...params.ribX, physical: { value: Math.round(result.bounds.z), unit: 'mm' } })
-        handleParamChange('ribY', { ...params.ribY, physical: { value: Math.round(result.bounds.y), unit: 'mm' } })
-        
-        // Remove parametric distortions so the true mesh shape is preserved
-        handleParamChange('waveHeight', 0)
-        handleParamChange('backplaneEnabled', false)
-        handleParamChange('sizeTransforms', [])
-        
-        setCustomRybSequence(result.sequence)
-        handleParamChange('ribShape', 'freeform')
-        alert(`Successfully converted 3D mesh into ${result.sequence.rybs.length} ribs.`)
-      } catch (err) {
-        console.error('Slicing error:', err)
-        alert('Error slicing mesh. Please try a simpler model.')
-      } finally {
-        setIsSlicing(false)
-      }
-    }, 100)
-  }
-
-  function sliceMeshToRybs(mesh: THREE.Mesh, params: ShelfParams): { sequence: CustomRybSequence, bounds: THREE.Vector3 } {
-    const ribCount = params.ribCount
-    const rybs: CustomRyb[] = []
-    
-    mesh.geometry.computeBoundingBox()
-    const bbox = mesh.geometry.boundingBox!
-    const size = new THREE.Vector3()
-    bbox.getSize(size)
-    const center = new THREE.Vector3()
-    bbox.getCenter(center)
-    
-    const raycaster = new THREE.Raycaster()
-    
-    // We want the mesh points to fit inside the canvas, preserving true aspect ratio.
-    // Z is mapped to canvas width (500). Y is mapped to canvas height (300).
-    // Scale uniformly based on the most constraining dimension.
-    const scale = Math.min(500 / (size.z || 1), 300 / (size.y || 1))
-    
-    const offsetX = 250 // Center of 500
-    const offsetY = 150 // Center of 300
-    
-    for (let i = 0; i < ribCount; i++) {
-      const t = i / (ribCount - 1 || 1)
-      const x = center.x - size.x/2 + t * size.x
-      
-      const segments: CurveSegment[] = []
-      const resolution = 64 // Increased from 12 to 64 for high-fidelity slice detection
-      const topPts: {x: number, y: number}[] = []
-      const bottomPts: {x: number, y: number}[] = []
-      
-      for (let j = 0; j <= resolution; j++) {
-          const tz = j / resolution
-          const z = center.z - size.z/2 + tz * size.z
-          
-          // Ray from far above
-          raycaster.set(new THREE.Vector3(x, center.y + size.y * 2, z), new THREE.Vector3(0, -1, 0))
-          const intersectsTop = raycaster.intersectObject(mesh)
-          
-          // Ray from far below
-          raycaster.set(new THREE.Vector3(x, center.y - size.y * 2, z), new THREE.Vector3(0, 1, 0))
-          const intersectsBottom = raycaster.intersectObject(mesh)
-          
-          if (intersectsTop.length > 0 && intersectsBottom.length > 0) {
-              const localZ = intersectsTop[0].point.z - center.z
-              const localTopY = intersectsTop[0].point.y - center.y
-              const localBottomY = intersectsBottom[0].point.y - center.y
-              
-              // Map to canvas preserving uniform scaling
-              // 3D Y is up, Canvas Y is down
-              const canvasX = offsetX + localZ * scale
-              const canvasTopY = offsetY - localTopY * scale
-              const canvasBottomY = offsetY - localBottomY * scale
-              
-              topPts.push({x: canvasX, y: canvasTopY})
-              bottomPts.push({x: canvasX, y: canvasBottomY})
-          }
-      }
-      
-      if (topPts.length > 1) {
-          for(let k=0; k<topPts.length-1; k++) segments.push({type:'line', start: topPts[k], end: topPts[k+1]})
-          segments.push({type:'line', start: topPts[topPts.length-1], end: bottomPts[bottomPts.length-1]})
-          for(let k=bottomPts.length-1; k>0; k--) segments.push({type:'line', start: bottomPts[k], end: bottomPts[k-1]})
-          segments.push({type:'line', start: bottomPts[0], end: topPts[0]})
-      } else {
-        // Fallback for empty slice: make a tiny 1x1 px dot in the center to remain invisible but valid
-        segments.push({type:'line', start:{x:250,y:150}, end:{x:251,y:150}})
-        segments.push({type:'line', start:{x:251,y:150}, end:{x:251,y:151}})
-        segments.push({type:'line', start:{x:251,y:151}, end:{x:250,y:151}})
-        segments.push({type:'line', start:{x:250,y:151}, end:{x:250,y:150}})
-      }
-      
-      rybs.push({
-          id: `ryb-${Date.now()}-${i}`,
-          name: `Slice ${i+1}`,
-          index: i,
-          depth: 20,
-          segments
-      })
-    }
-    
-    return {
-      sequence: {
-        rybs,
-        spacingType: 'even',
-        interpolation: 'linear',
-        selectedIndex: 0
-      },
-      bounds: size
-    }
-  }
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [cyclingRybIndex, setCyclingRybIndex] = useState(0)
   const [cyclingFadeIn, setCyclingFadeIn] = useState(true)
   const [expandedRibEditor, setExpandedRibEditor] = useState(false)
   const [expandedShelfEditor, setExpandedShelfEditor] = useState(false)
   const [selectedRibIndex, setSelectedRibIndex] = useState<number | undefined>(undefined)
+
 
   // Map a keyframe index (within customRybSequence.rybs) to the corresponding shelf position index
   const keyframeToShelfIndex = useCallback((keyframeIdx: number): number | undefined => {
@@ -1990,8 +1679,6 @@ function App() {
     return Math.round(t * (N - 1))
   }, [customRybSequence, params.ribCount])
 
-  // Only pass freeform points when shape is actually freeform
-  const activeFreeformPoints = params.ribShape === 'freeform' ? freeformPoints : undefined
 
   // Cycle through ryb indices for the mini preview
   useEffect(() => {
@@ -2007,73 +1694,45 @@ function App() {
     return () => clearInterval(interval)
   }, [params.ribCount, siteConfig.previewCycleIntervalMs, siteConfig.previewFadeDurationMs])
 
-  const calculations = useMemo(() => calculateSheetsNeeded(params), [
-    params.length.value, params.length.unit, params.height.value, params.height.unit,
-    params.materialThickness.value, params.materialThickness.unit, params.ribCount,
-    params.ribX.physical.value, params.ribX.factor, params.ribY.physical.value, params.ribY.factor
-  ])
+  // --- STRIPE SUCCESS DETECTION (EPIC-13) ---
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const sessionId = urlParams.get('session_id')
+    
+    if (sessionId) {
+      setShowSuccessModal(true)
+      // Attempt to get the email from the URL if we passed it back, 
+      // or just show a generic success message.
+      // Cleaning the URL so the modal doesn't re-appear on refresh
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
+  // calculations is now provided by useDesignerState (RYB-112)
   const selectedMaterial = useMemo(() => MATERIALS.find(m => m.id === params.material) || MATERIALS[0], [params.material])
   const selectedFinish = useMemo(() => FINISHES.find(f => f.id === params.finish) || FINISHES[0], [params.finish])
   const basePrice = useMemo(() => selectedMaterial.price * calculations.sheets, [selectedMaterial.price, calculations.sheets])
   const finishPrice = useMemo(() => selectedFinish.price * params.ribCount, [selectedFinish.price, params.ribCount])
   const totalPrice = useMemo(() => basePrice + finishPrice + 35, [basePrice, finishPrice])
 
-  const handleParamChange = (key: keyof ShelfParams, value: any) => {
-    setParams(prev => ({ ...prev, [key]: value }))
-  }
+  // handleParamChange, axis callbacks, handlePresetClick: all from useDesignerState (RYB-112)
 
-  const handleRibXPhysicalChange = useCallback((physical: DimensionUnit) => {
-    setParams(prev => ({ ...prev, ribX: updateAxisDimensionFromPhysical(prev.ribX, physical) }))
-  }, [])
-
-  const handleRibXFactorChange = useCallback((factor: number) => {
-    setParams(prev => ({ ...prev, ribX: updateAxisDimensionFromFactor(prev.ribX, factor) }))
-  }, [])
-
-  const handleRibYPhysicalChange = useCallback((physical: DimensionUnit) => {
-    setParams(prev => ({ ...prev, ribY: updateAxisDimensionFromPhysical(prev.ribY, physical) }))
-  }, [])
-
-  const handleRibYFactorChange = useCallback((factor: number) => {
-    setParams(prev => ({ ...prev, ribY: updateAxisDimensionFromFactor(prev.ribY, factor) }))
-  }, [])
-
-  const handleRibZPhysicalChange = useCallback((physical: DimensionUnit) => {
-    setParams(prev => ({ ...prev, ribZ: updateAxisDimensionFromPhysical(prev.ribZ, physical) }))
-  }, [])
-
-  const handleRibZFactorChange = useCallback((factor: number) => {
-    setParams(prev => ({ ...prev, ribZ: updateAxisDimensionFromFactor(prev.ribZ, factor) }))
-  }, [])
-
-  const handlePresetClick = (presetId: string) => {
-    const preset = PRESETS.find(p => p.id === presetId)
-    if (preset) {
-      setActivePreset(presetId)
-      handleParamChange('waveHeight', preset.params.waveHeight)
-      handleParamChange('waveFrequency', preset.params.waveFrequency)
-      handleParamChange('ribCount', preset.params.ribCount)
-    }
-  }
-
-  const userEmail = user?.primaryEmailAddress?.emailAddress
+  const userEmail = user?.email || null
 
   const handleStripeCheckout = async () => {
     setIsRedirecting(true)
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001'
-      const response = await fetch(`${apiUrl}/api/create-checkout-session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ params, price: totalPrice, userEmail })
+      const { url, error } = await payment.createCheckoutSession({
+        price: totalPrice,
+        params,
+        userEmail: user?.email || null,
+        userId: user?.id || null // Critical for guest vs auth distinction in backend
       })
-      const data = await response.json()
       
-      if (data.url) {
-        window.location.href = data.url
+      if (url) {
+        window.location.href = url
       } else {
-        console.error('No Checkout URL returned:', data)
+        console.error('No Checkout URL returned:', error)
       }
     } catch (error) {
       console.error('Checkout error:', error)
@@ -2139,26 +1798,11 @@ function App() {
       )
 
       if (format === 'svg') {
-        const svg = makerjs.exporter.toSVG(fullModel, {
-          units: makerjs.unitType.Millimeter,
-          stroke: 'black',
-          strokeWidth: '0.5px',
-          fill: 'none',
-        })
-        const blob = new Blob([svg], { type: 'image/svg+xml' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url; a.download = `rybform-cutfile-${params.ribCount}rybs.svg`; a.click()
-        URL.revokeObjectURL(url)
+        const svg = ExportService.generateSVG(fullModel)
+        ExportService.downloadFile(svg, 'image/svg+xml', `rybform-cutfile-${params.ribCount}rybs.svg`)
       } else {
-        const dxf = makerjs.exporter.toDXF(fullModel, {
-          units: makerjs.unitType.Millimeter
-        })
-        const blob = new Blob([dxf], { type: 'application/dxf' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url; a.download = `rybform-cutfile-${params.ribCount}rybs.dxf`; a.click()
-        URL.revokeObjectURL(url)
+        const dxf = ExportService.generateDXF(fullModel)
+        ExportService.downloadFile(dxf, 'application/dxf', `rybform-cutfile-${params.ribCount}rybs.dxf`)
       }
     } finally {
       setIsExporting(false)
@@ -2166,16 +1810,6 @@ function App() {
     }
   }
 
-  const handleResetRyb = () => {
-    setFreeformPoints([])
-    setCustomRybSequence(null)
-  }
-
-  const handleResetAllRybs = () => {
-    setFreeformPoints([])
-    setCustomRybSequence(null)
-    setParams(prev => ({ ...prev, ribShape: 'square' }))
-  }
 
   return (
     <div className="min-h-screen grain">
@@ -2191,7 +1825,10 @@ function App() {
             {user ? (
               <>
                 {isAdmin && (
-                  <button onClick={() => setShowExport(true)} className="text-sm tracking-wide text-oak hover:text-charcoal transition-colors">Export</button>
+                  <>
+                    <button onClick={() => setActiveSection('admin')} className={`text-sm tracking-wide transition-colors ${activeSection === 'admin' ? 'text-charcoal' : 'text-warm-gray hover:text-stone'}`}>Admin Dashboard</button>
+                    <button onClick={() => setShowExport(true)} className="text-sm tracking-wide text-oak hover:text-charcoal transition-colors">Export</button>
+                  </>
                 )}
                 <UserButton />
               </>
@@ -2275,7 +1912,7 @@ function App() {
 
                           <button 
                             disabled={isSlicing}
-                            onClick={handleApplySlicing} 
+                            onClick={() => handleApplySlicing(uploadedMesh!, setCustomRybSequence)} 
                             className={`w-full px-4 py-2 rounded-lg transition-all text-xs font-bold shadow-sm ${isSlicing ? 'bg-stone/20 text-stone cursor-wait' : 'bg-charcoal text-white hover:bg-charcoal/90 hover:scale-[1.02]'}`}
                           >
                             {isSlicing ? 'Processing Mesh...' : 'Convert to Rybs'}
@@ -2388,7 +2025,7 @@ function App() {
                   <h3 className="font-display text-base text-charcoal mb-4">Ryb Shape</h3>
                   <div className="grid grid-cols-2 gap-2">
                     {RIB_SHAPES.map((shape) => (
-                      <button key={shape.id} onClick={() => { handleParamChange('ribShape', shape.id); if (shape.id === 'freeform') setShowFreeformDrawer(true) }} className={`p-3 text-center text-sm rounded-lg transition-all ${params.ribShape === shape.id ? 'bg-charcoal text-cream' : 'bg-cream text-charcoal hover:bg-stone/10'}`}>
+                      <button key={shape.id} onClick={() => { handleParamChange('ribShape', shape.id as import('./core/domain/types').RibShape); if (shape.id === 'freeform') setShowFreeformDrawer(true) }} className={`p-3 text-center text-sm rounded-lg transition-all ${params.ribShape === shape.id ? 'bg-charcoal text-cream' : 'bg-cream text-charcoal hover:bg-stone/10'}`}>
                         <span className="block text-lg mb-1">{shape.icon}</span>
                         {shape.name}
                       </button>
@@ -2555,7 +2192,7 @@ function App() {
                       <>
                         <div>
                           <label className="flex justify-between text-xs text-warm-gray mb-1"><span>Shape</span></label>
-                          <select value={params.backplaneShape} onChange={(e) => handleParamChange('backplaneShape', e.target.value)} className="w-full px-2 py-1.5 text-sm rounded bg-cream border border-stone/20">
+                          <select value={params.backplaneShape} onChange={(e) => handleParamChange('backplaneShape', e.target.value as 'organic' | 'rectangular')} className="w-full px-2 py-1.5 text-sm rounded bg-cream border border-stone/20">
                             <option value="rectangular">Rectangular</option>
                             <option value="organic">Organic Wave</option>
                           </select>
@@ -2613,26 +2250,30 @@ function App() {
                 </div>
               </div>
               
-              {user ? (
-                isAdmin ? (
+              {isAdmin ? (
+                <div className="space-y-3">
+                  <button 
+                    className="w-full py-4 bg-oak text-charcoal font-bold rounded-xl hover:bg-cream hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-oak/20" 
+                    onClick={() => setShowExport(true)}
+                  >
+                    Export Production Files (Admin)
+                  </button>
                   <button 
                     disabled={isRedirecting} 
-                    className="w-full py-4 bg-oak text-charcoal font-bold rounded-xl hover:bg-cream hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 shadow-lg shadow-oak/20" 
+                    className="w-full py-3 bg-transparent border border-oak/30 text-oak font-bold rounded-xl hover:bg-oak/10 transition-all disabled:opacity-50"
                     onClick={handleStripeCheckout}
                   >
-                    {isRedirecting ? 'Redirecting to Checkout...' : 'Export & Order Components'}
+                    {isRedirecting ? 'Redirecting to Checkout...' : 'Test Stripe Checkout'}
                   </button>
-                ) : (
-                  <div className="text-center p-4 bg-terracotta/10 border border-terracotta/20 rounded-xl">
-                    <p className="text-terracotta text-sm font-medium">Administrative access required to export production files.</p>
-                  </div>
-                )
+                </div>
               ) : (
-                <SignInButton mode="modal" fallbackRedirectUrl="/">
-                  <button className="w-full py-4 bg-cream text-charcoal font-bold rounded-xl hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-lg">
-                    Sign in to Export Design
-                  </button>
-                </SignInButton>
+                <button 
+                  disabled={isRedirecting} 
+                  className="w-full py-4 bg-oak text-charcoal font-bold rounded-xl hover:bg-cream hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 shadow-lg shadow-oak/20"
+                  onClick={handleStripeCheckout}
+                >
+                  {isRedirecting ? 'Redirecting to Checkout...' : 'Buy Now'}
+                </button>
               )}
             </div>
           </div>
@@ -2847,13 +2488,50 @@ function App() {
                         setUploadedMesh(finalMesh)
                         setShowUploadPreview(false)
                         
-                        setTimeout(() => handleApplySlicing(finalMesh), 50)
+                        setTimeout(() => handleApplySlicing(finalMesh, setCustomRybSequence), 50)
                     }}
                     className="flex-1 py-2 rounded-lg bg-primary text-cream text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
                   >
                     Confirm & Slice
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal (EPIC-13) */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-charcoal/40 backdrop-blur-sm" onClick={() => setShowSuccessModal(false)} />
+          <div className="relative bg-cream rounded-3xl p-8 max-w-lg w-full shadow-2xl border border-stone/10 animate-in fade-in zoom-in duration-500">
+            <div className="w-20 h-20 bg-oak/10 text-oak rounded-full flex items-center justify-center mx-auto mb-6 text-4xl">
+              ✓
+            </div>
+            <h2 className="font-display text-3xl text-charcoal text-center mb-4">Payment Successful!</h2>
+            <div className="space-y-4 text-center">
+              <p className="text-stone">
+                Thank you for your order! Your custom Rybform design is now being processed for fabrication.
+              </p>
+              
+              {!user && (
+                <div className="bg-oak/5 p-4 rounded-2xl border border-oak/10 text-sm">
+                  <p className="font-bold text-charcoal mb-2">Check Your Email</p>
+                  <p className="text-stone leading-relaxed">
+                    Since you checked out as a guest, we've sent a <strong>Clerk Magic Link</strong> to your inbox.
+                    Click it to create your account and claim your order history!
+                  </p>
+                </div>
+              )}
+              
+              <div className="pt-6">
+                <button 
+                  onClick={() => setShowSuccessModal(false)}
+                  className="btn-primary w-full py-4 text-lg"
+                >
+                  Return to Designer
+                </button>
               </div>
             </div>
           </div>
