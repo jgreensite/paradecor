@@ -35,3 +35,10 @@ test-output/
 
 # Analysis artifacts
 examples/dxf_analysis.json
+
+# Tooling and Debugging
+coverage/
+tmp/
+*.txt
+!*.md
+coverage_report.txt

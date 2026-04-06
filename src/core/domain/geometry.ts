@@ -78,7 +78,7 @@ export function computeProjectedSlotDimensions(profile: { rotateX?: number; rota
  * Create a single slot shape with dogbone fillets at each end.
  * The slot is a rectangle with semicircular bulges at each short end.
  */
-function createDogboneSlot(width: number, height: number, dogboneRadius: number): makerjs.IModel {
+export function createDogboneSlot(width: number, height: number, dogboneRadius: number): makerjs.IModel {
     // The slot body is a rectangle
     const halfW = width / 2
     const halfH = height / 2
@@ -197,7 +197,7 @@ export function createBackplaneOutline(
     ])
 }
 
-function getInterpolatedHeight(x: number, nodes: { x: number, h: number }[]): number {
+export function getInterpolatedHeight(x: number, nodes: { x: number, h: number }[]): number {
     if (nodes.length === 0) return 0;
     if (x <= nodes[0].x) return nodes[0].h;
     if (x >= nodes[nodes.length - 1].x) return nodes[nodes.length - 1].h;
@@ -245,7 +245,7 @@ export function createOrganicBackplaneOutline(
 
 export interface CncSheetLayout {
     sheets: makerjs.IModel[]
-    sheetCount: number
+    sheetIdx: number
 }
 
 export function generateCncLayout(
@@ -259,24 +259,23 @@ export function generateCncLayout(
     const PADDING = 15
 
     const models: Record<string, makerjs.IModel> = {}
-    let modelIdx = 0
-    let sheetCount = 0
+    let sheetIdx = 0
+    let rybIdx = 0
 
     function addSheet() {
         // Use ConnectTheDots instead of Rectangle so it stays a closed single entity
         const sheet = new makerjs.models.ConnectTheDots(true, [
             [0, 0], [SHEET_W, 0], [SHEET_W, SHEET_H], [0, SHEET_H]
         ])
-        makerjs.model.move(sheet, [0, sheetCount * (SHEET_H + 50)])
-        models[`sheet_${modelIdx++}`] = sheet
-        sheetCount++
+        makerjs.model.move(sheet, [0, sheetIdx * (SHEET_H + 50)])
+        models[`sheet_${sheetIdx++}`] = sheet
     }
 
     addSheet()
 
     // Current packing position
     let curX = PADDING
-    let curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
+    let curY = PADDING + (sheetIdx - 1) * (SHEET_H + 50)
     let rowHeight = 0
 
     // Place each ryb profile on the sheet(s)
@@ -292,9 +291,9 @@ export function generateCncLayout(
             rowHeight = 0
 
             // Check if we need to advance to next sheet
-            if (curY + h + PADDING > sheetCount * (SHEET_H + 50)) {
+            if (curY + h + PADDING > sheetIdx * (SHEET_H + 50)) {
                 addSheet()
-                curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
+                curY = PADDING + (sheetIdx - 1) * (SHEET_H + 50)
             }
         }
 
@@ -361,7 +360,7 @@ export function generateCncLayout(
 
         // Position it such that the bottom-left of the bounding box is at [curX, curY]
         makerjs.model.moveRelative(rybGroup, [curX - (bbox?.low?.[0] ?? 0), curY - (bbox?.low?.[1] ?? 0)])
-        models[`ryb_${modelIdx++}`] = rybGroup
+        models[`ryb_${rybIdx++}`] = rybGroup
 
         curX += ((bbox?.high?.[0] ?? w) - (bbox?.low?.[0] ?? 0)) + PADDING
         rowHeight = Math.max(rowHeight, h)
@@ -400,9 +399,9 @@ export function generateCncLayout(
             curX = PADDING
             curY += rowHeight + PADDING * 2
 
-            if (curY + bpHeightTotal + PADDING > sheetCount * (SHEET_H + 50)) {
+            if (curY + bpHeightTotal + PADDING > sheetIdx * (SHEET_H + 50)) {
                 addSheet()
-                curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
+                curY = PADDING + (sheetIdx - 1) * (SHEET_H + 50)
             }
 
             const outlinePath = highResWavePath || rybPositions;
@@ -441,9 +440,9 @@ export function generateCncLayout(
             curX = PADDING
             curY += rowHeight + PADDING * 2
 
-            if (curY + bpHeightTotal + PADDING > sheetCount * (SHEET_H + 50)) {
+            if (curY + bpHeightTotal + PADDING > sheetIdx * (SHEET_H + 50)) {
                 addSheet()
-                curY = PADDING + (sheetCount - 1) * (SHEET_H + 50)
+                curY = PADDING + (sheetIdx - 1) * (SHEET_H + 50)
             }
 
             const bpOutline = createBackplaneOutline(bpWidth, bpHeightTotal, 12)

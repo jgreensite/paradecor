@@ -7,6 +7,7 @@ import { ClerkAuthAdapter } from './infrastructure/adapters/ClerkAuthAdapter'
 import { StripePaymentAdapter } from './infrastructure/adapters/StripePaymentAdapter'
 import { ToastProvider } from './components/ui/Toast'
 import './index.css'
+import { AppErrorBoundary } from './components/AppErrorBoundary'
 import App from './App.tsx'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
@@ -26,11 +27,13 @@ const appDependencies = {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
-      <ToastProvider>
-        <DependencyProvider initialDependencies={appDependencies}>
-          <App />
-        </DependencyProvider>
-      </ToastProvider>
+      <AppErrorBoundary>
+        <ToastProvider>
+          <DependencyProvider initialDependencies={appDependencies}>
+            <App />
+          </DependencyProvider>
+        </ToastProvider>
+      </AppErrorBoundary>
     </ClerkProvider>
   </StrictMode>,
 )
