@@ -385,6 +385,19 @@ describe('calculateSheetsNeeded', () => {
     expect(calculateSheetsNeeded(DEFAULT_PARAMS).sheets).toBeGreaterThanOrEqual(1)
   })
 
+  it('does not inflate sheet count based on material thickness', () => {
+    const thin = calculateSheetsNeeded({
+      ...DEFAULT_PARAMS,
+      materialThickness: { value: 6, unit: 'mm' },
+    })
+    const thick = calculateSheetsNeeded({
+      ...DEFAULT_PARAMS,
+      materialThickness: { value: 25, unit: 'mm' },
+    })
+
+    expect(thick.sheets).toBe(thin.sheets)
+  })
+
   it('efficiency is in [0, 95] range', () => {
     const { efficiency } = calculateSheetsNeeded(DEFAULT_PARAMS)
     expect(efficiency).toBeGreaterThanOrEqual(0)
@@ -395,6 +408,10 @@ describe('calculateSheetsNeeded', () => {
     const r1 = calculateSheetsNeeded(DEFAULT_PARAMS)
     const r2 = calculateSheetsNeeded({ ...DEFAULT_PARAMS, ribCount: DEFAULT_PARAMS.ribCount * 2 })
     expect(r2.sheets).toBeGreaterThanOrEqual(r1.sheets * 2 - 1)
+  })
+
+  it('matches the default design quote assumption of one sheet', () => {
+    expect(calculateSheetsNeeded(DEFAULT_PARAMS).sheets).toBe(1)
   })
 })
 

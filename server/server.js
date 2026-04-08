@@ -31,14 +31,75 @@ app.use(globalLimiter);
 
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }));
 
+const MM_PER_INCH = 25.4;
+
+const MATERIAL_PRICES = {
+  mdf: 45,
+  'birch-plywood': 65,
+  'walnut-plywood': 85,
+  'white-pvc': 55,
+};
+const MATERIAL_IDS = ['mdf', 'birch-plywood', 'walnut-plywood', 'white-pvc'];
+
+const FINISH_PRICES = {
+  raw: 0,
+  'matte-white': 15,
+  'matte-black': 15,
+  gloss: 25,
+  'natural-oil': 20,
+};
+const FINISH_IDS = ['raw', 'matte-white', 'matte-black', 'gloss', 'natural-oil'];
+
+const toMM = (dimension) => {
+  if (!dimension || typeof dimension.value !== 'number' || !dimension.unit) {
+    throw new Error('Invalid dimension payload');
+  }
+
+  return dimension.unit === 'mm' ? dimension.value : dimension.value * MM_PER_INCH;
+};
+
+const calculateSheetsNeeded = (params) => {
+  const widthMM = toMM(params.ribX.physical) * params.ribX.factor;
+  const heightMM = toMM(params.ribY.physical) * params.ribY.factor;
+  const totalArea = widthMM * heightMM * params.ribCount;
+  const sheetArea = 48 * 96 * MM_PER_INCH * MM_PER_INCH;
+  return Math.max(1, Math.ceil(totalArea / sheetArea));
+};
+
+const calculateCheckoutPrice = (params) => {
+  const materialPrice = MATERIAL_PRICES[params.material];
+  const finishPrice = FINISH_PRICES[params.finish];
+
+  if (typeof materialPrice !== 'number') {
+    throw new Error(`Unsupported material: ${params.material}`);
+  }
+
+  if (typeof finishPrice !== 'number') {
+    throw new Error(`Unsupported finish: ${params.finish}`);
+  }
+
+  const sheets = calculateSheetsNeeded(params);
+  return materialPrice * sheets + finishPrice * params.ribCount + 35;
+};
+
 // Zod Schema for Checkout Session
 const checkoutSchema = z.object({
   params: z.object({
     length: z.object({ value: z.number(), unit: z.string() }),
     height: z.object({ value: z.number(), unit: z.string() }),
+    ribX: z.object({
+      physical: z.object({ value: z.number().positive(), unit: z.enum(['mm', 'in']) }),
+      factor: z.number().positive(),
+    }),
+    ribY: z.object({
+      physical: z.object({ value: z.number().positive(), unit: z.enum(['mm', 'in']) }),
+      factor: z.number().positive(),
+    }),
+    materialThickness: z.object({ value: z.number().positive(), unit: z.enum(['mm', 'in']) }).optional(),
     ribCount: z.number().min(1).max(100),
-    material: z.string(),
-    backplaneBezier: z.array(z.any()).optional(),
+    material: z.enum(MATERIAL_IDS),
+    finish: z.enum(FINISH_IDS),
+    backplaneBezier: z.any().nullable().optional(),
   }),
   price: z.number().positive(),
   userEmail: z.string().email().optional(),
@@ -93,6 +154,7 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (reque
         
         if (error) {
           console.error(`Error updating order ${orderId}: ${error.message}`);
+          return response.status(500).send('Order update failed');
         } else {
           console.log(`Order ${orderId} marked as approved with Stripe ID.`);
           
@@ -149,19 +211,20 @@ app.post('/api/create-checkout-session', checkoutLimiter, async (req, res) => {
       });
     }
 
-    const { params, price, userEmail } = validationResult.data;
+    const { params, userEmail } = validationResult.data;
+    const computedPrice = calculateCheckoutPrice(params);
 
     // 1. Create a pending order in Supabase
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([
         {
-          customer_email: userEmail || null,
-          design_payload: params,
-          status: 'awaiting_approval',
-          is_custom_design: !!params.backplaneBezier,
-        }
-      ])
+            customer_email: userEmail || null,
+            design_payload: params,
+            status: 'awaiting_approval',
+            is_custom_design: !!params.backplaneBezier,
+          }
+        ])
       .select()
       .single();
 
@@ -178,7 +241,7 @@ app.post('/api/create-checkout-session', checkoutLimiter, async (req, res) => {
               name: `Custom Rybform Shelf - ${params.ribCount} Rybs`,
               description: `${params.length.value}${params.length.unit} x ${params.height.value}${params.height.unit} in ${params.material}`,
             },
-            unit_amount: Math.round(price * 100), // Stripe expects cents
+            unit_amount: Math.round(computedPrice * 100), // Stripe expects cents
           },
           quantity: 1,
         },
