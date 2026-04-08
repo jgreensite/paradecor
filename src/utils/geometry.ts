@@ -256,16 +256,12 @@ export function calculateShelfBoundingBox(params: ShelfParams): { width: number,
 }
 
 export function calculateSheetsNeeded(params: ShelfParams): { sheets: number, efficiency: number } {
-  const lengthMM = toMM(params.length)
   const widthMM = toMM(params.ribX.physical) * params.ribX.factor
   const heightMM = toMM(params.ribY.physical) * params.ribY.factor
-  const thicknessMM = toMM(params.materialThickness)
-
-  const ribArea = widthMM * heightMM * thicknessMM
-  const totalArea = ribArea * params.ribCount
+  const totalArea = widthMM * heightMM * params.ribCount
   const sheetArea = 48 * 96 * MM_PER_INCH * MM_PER_INCH
 
-  const sheets = Math.ceil(totalArea / sheetArea)
+  const sheets = Math.max(1, Math.ceil(totalArea / sheetArea))
   const efficiency = Math.min(95, Math.round((totalArea / (sheets * sheetArea)) * 100))
 
   return { sheets, efficiency }

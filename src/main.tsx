@@ -2,7 +2,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/react'
-import { DependencyProvider, Dependencies } from './context/DependencyContext'
+import { DependencyProvider } from './context/DependencyContext'
 import { ClerkAuthAdapter } from './infrastructure/adapters/ClerkAuthAdapter'
 import { StripePaymentAdapter } from './infrastructure/adapters/StripePaymentAdapter'
 import { ToastProvider } from './components/ui/Toast'
