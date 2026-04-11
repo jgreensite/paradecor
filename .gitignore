@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+/server/.env
+/server/.env.*
 
 # Editor directories and files
 .vscode/*
@@ -28,6 +32,15 @@ dist-ssr
 
 # Test output
 test-output/
+playwright-report/
+test-results/
 
 # Analysis artifacts
 examples/dxf_analysis.json
+
+# Tooling and Debugging
+coverage/
+tmp/
+*.txt
+!*.md
+coverage_report.txt

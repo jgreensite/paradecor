@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "repo:fix": "sh scripts/setup-env.sh"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
@@ -14,15 +18,20 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^4.1.2",
+    "dependency-cruiser": "^17.3.10",
     "tailwindcss": "^4.2.0",
     "typescript": "~5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "@clerk/react": "^6.1.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
-    "@stripe/stripe-js": "^8.9.0",
+    "@stripe/stripe-js": "^8.11.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "lucide-react": "1.7.0",
     "makerjs": "^0.19.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
