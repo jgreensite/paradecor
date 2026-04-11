@@ -11,6 +11,7 @@ export default defineConfig({
       'src/**/*.test.ts',
       'src/**/*.test.tsx',
       'tests/architecture.spec.ts',
+      'tests/runtime-contracts.spec.ts',
     ],
     exclude: [
       'tests/shelf-creator.spec.ts',

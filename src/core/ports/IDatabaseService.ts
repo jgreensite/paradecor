@@ -1,7 +1,7 @@
 import type { ShelfParams } from '../domain/types';
 
 /**
- * Order — mirrors the authoritative orders_schema.sql.
+ * Order — mirrors the authoritative server/schema.sql contract.
  *
  * customer_email and stripe_payment_id are nullable to support
  * guest checkout flows where email is captured post-payment via webhook.

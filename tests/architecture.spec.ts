@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 describe('Architecture boundaries (dependency-cruiser)', () => {
-  it('should not violate any dependency-cruiser rules across src/', () => {
+  it('should not violate any dependency-cruiser rules across src/', { timeout: 20_000 }, () => {
     try {
       const result = execSync('npx depcruise src --config .dependency-cruiser.cjs', {
         encoding: 'utf8',
