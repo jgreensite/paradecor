@@ -1,0 +1,823 @@
+{
+    "metadata":  {
+                     "version":  "1.0.0",
+                     "project":  "paradecor",
+                     "product":  "Rybform",
+                     "last_updated":  "2026-02-28T07:42:00Z",
+                     "linear_team_key":  "RYB",
+                     "config":  {
+                                    "_comment":  "Developer-configurable animation parameters â€” change values here only",
+                                    "preview_cycle_interval_ms":  10000,
+                                    "preview_fade_duration_ms":  800,
+                                    "camera_sweep_speed":  0.15,
+                                    "camera_sweep_amplitude":  0.3,
+                                    "mesh_curve_segments":  32,
+                                    "mesh_extrude_steps":  1
+                                }
+                 },
+    "epics":  [
+                  {
+                      "id":  "EPIC-01",
+                      "title":  "Preview \u0026 Camera Polish",
+                      "description":  "Hero section previews: cycling rybs, independent shelf preview, configurable sweep/pan animations"
+                  },
+                  {
+                      "id":  "EPIC-02",
+                      "title":  "Editor UX \u0026 Interactions",
+                      "description":  "Ryb selection in single editor, reset buttons, expand/collapse, gimbal/pan/zoom controls, freeform drawing improvements"
+                  },
+                  {
+                      "id":  "EPIC-03",
+                      "title":  "Rendering Quality",
+                      "description":  "Fix mesh shimmer artifacts, improve orthographic view zoom math, independent zoom per view"
+                  },
+                  {
+                      "id":  "EPIC-04",
+                      "title":  "Mobile \u0026 Responsive Layout",
+                      "description":  "Improve layout for mobile and tablet breakpoints"
+                  },
+                  {
+                      "id":  "EPIC-05",
+                      "title":  "Testing \u0026 Quality",
+                      "description":  "Expand Playwright test coverage for multi-ryb interpolation, UI interactions, and regression"
+                  },
+                  {
+                      "id":  "EPIC-06",
+                      "title":  "Export \u0026 File Output",
+                      "description":  "Implement SVG/DXF cut file generation from parametric shelf data"
+                  },
+                  {
+                      "id":  "EPIC-07",
+                      "title":  "Backplane \u0026 CNC Quality",
+                      "description":  "Replace rod mounting with backplane system, implement CNC-quality DXF export with makerjs, dogbone slot fillets, and empirical accuracy testing against reference CNC files"
+                  },
+                  {
+                      "id":  "EPIC-08",
+                      "title":  "Ops Tooling \u0026 Internal Scripts",
+                      "description":  "Stop using hacky, inline node/python scripts for development tasks. Centralize all ops workflows (start/stop server, parsing test results, test running) into a robust Python CLI (e.g., `para_ops.py`) to streamline local development."
+                  },
+                  {
+                      "id":  "EPIC-09",
+                      "title":  "Organic Backplane Designer \u0026 Rib Interlocking",
+                      "description":  "Recreate the original test CNC file\u0027s complex organic backplane shape within the app, and ensure full physical interlocking (slots + tabs on rybs) for manufacturing.",
+                      "status":  "todo",
+                      "priority":  "P0"
+                  },
+                  {
+                      "id":  "EPIC-10",
+                      "title":  "Editor Refinements",
+                      "description":  "Fix highlighting bugs, add freeform drawing tools (pen, delete, convert), improve custom ryb editing workflow."
+                  },
+                  {
+                      "id":  "EPIC-11",
+                      "title":  "Dynamic Backplane Geometry",
+                      "description":  "Compute rotation-aware slot widths, handle freeform projections, optimise backplane surface for ryb clearance."
+                  },
+                  {
+                      "id":  "EPIC-12",
+                      "title":  "Authentication \u0026 Access Control",
+                      "description":  "Integrate Clerk auth with RBAC. Gate downloads behind sign-in with admin role check."
+                  },
+                  {
+                      "id":  "EPIC-13",
+                      "title":  "Payments",
+                      "description":  "Stripe integration for shelf cut file purchases. Checkout sessions, webhooks, order metadata."
+                  },
+                  {
+                      "id":  "EPIC-14",
+                      "title":  "Order Management \u0026 Fulfilment",
+                      "description":  "Supabase order model, admin dashboard, manufacturing partner API, shipping tracking."
+                  },
+                  {
+                      "title":  "Mobile-First 3D Interaction \u0026 Gesture Overhaul",
+                      "description":  "Replace the clunky, list-based node management with an intuitive, direct-manipulation 3D interface tailored for touch devices.",
+                      "id":  "EPIC-22"
+                  },
+                  {
+                      "title":  "Custom 3D Object Upload Pipeline Polish",
+                      "description":  "Streamline the 3D upload process to ensure imported models are immediately usable, correctly oriented, and visually validated.",
+                      "id":  "EPIC-23"
+                  },
+                  {
+                      "title":  "Human-Centric UI \u0026 Workflow Redesign",
+                      "description":  "Overhaul the Custom Ryb Editor\u0027s web and mobile interfaces to reduce cognitive load and prioritize essential tasks.",
+                      "id":  "EPIC-24"
+                  }
+              ],
+    "stories":  [
+                    {
+                        "id":  "RYB-001",
+                        "epic":  "EPIC-01",
+                        "title":  "Mini preview cycles through shelf rybs with fade",
+                        "description":  "Top-right mini preview should cycle through each ryb in the shelf set every N seconds with a smooth fade in/out transition. Interval and fade duration are developer-configurable.",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "preview",
+                                       "animation"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-002",
+                        "epic":  "EPIC-01",
+                        "title":  "Shelf preview independent from Full Ryb Editor view",
+                        "description":  "The hero shelf preview and the top-right mini preview should not change when the user switches views in the Full Ryb Editor (top/front/side/3d).",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "preview",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-003",
+                        "epic":  "EPIC-01",
+                        "title":  "Gentle camera sweep/pan on preview canvases",
+                        "status":  "done",
+                        "priority":  "medium",
+                        "labels":  [
+                                       "preview",
+                                       "animation"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-004",
+                        "epic":  "EPIC-03",
+                        "title":  "Fix mesh shimmer artifacts on complex freeform shapes",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "rendering",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-005",
+                        "epic":  "EPIC-03",
+                        "title":  "Fix orthographic view zoom math (top/front/side)",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "rendering",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-019",
+                        "epic":  "EPIC-06",
+                        "title":  "Implement SVG cut file export",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "export",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-020",
+                        "epic":  "EPIC-06",
+                        "title":  "Implement DXF cut file export",
+                        "status":  "done",
+                        "priority":  "medium",
+                        "labels":  [
+                                       "export",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-019"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-021",
+                        "epic":  "EPIC-07",
+                        "title":  "Backplane system replaces rods",
+                        "description":  "Replace Wall Mount / Rods section with Backplane configuration. Backplane is a flat panel that sits against the wall with slots cut into it for rybs to slot through. Includes material thickness, slot depth, and dogbone radius controls.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "backplane",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-022",
+                        "epic":  "EPIC-07",
+                        "title":  "Dogbone fillet slots for CNC router clearance",
+                        "description":  "Slot cutouts in the backplane have semicircular dogbone fillets at each end for CNC router bit clearance. Uses makerjs stadium shape (rectangle + semicircle caps).",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "backplane",
+                                       "cnc",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-021"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-023",
+                        "epic":  "EPIC-07",
+                        "title":  "Makerjs-powered DXF/SVG export",
+                        "description":  "Replace basic DXF/SVG generation with makerjs exporter for CNC-quality cut files. Includes sheet layout on 1220x2440mm panels, proper entity types, and unit handling.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "export",
+                                       "cnc",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-022"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-024",
+                        "epic":  "EPIC-07",
+                        "title":  "Increase max ryb count from 30 to 200",
+                        "description":  "Reference CNC files have ~100 rybs. Increase the ryb count slider max from 30 to 200.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "feature"
+                                   ],
+                        "last_updated":  "2026-03-08T09:15:00Z",
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-025",
+                        "epic":  "EPIC-07",
+                        "title":  "DXF accuracy testing against reference CNC file",
+                        "description":  "Empirical test harness using ezdxf (Python) to parse generated DXF and compare to reference CNC_FILE_105_12MM.dxf. Measures ryb count, slot count, backplane presence, and shape accuracy. Target 80% accuracy.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "testing",
+                                       "cnc"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-023"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-026",
+                        "epic":  "EPIC-08",
+                        "title":  "Centralize ops scripts into para_ops.py",
+                        "description":  "Create a unified python script `scripts/para_ops.py` to handle all operational tasks (running Playwright tools, parsing DXF score metrics, running servers), replacing inline hacky scripts with robust tooling.",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "ops",
+                                       "tooling"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-027",
+                        "epic":  "EPIC-09",
+                        "title":  "Organic Backplane Shape Generator",
+                        "description":  "Mechanism to design an organic curved backplane shape in the software. Must handle the smooth sweep wave profile matching the reference CNC, unlike the current simple rectangular/stadium backplanes.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "backplane",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-028",
+                        "epic":  "EPIC-09",
+                        "title":  "Ryb Interlocking Protrusions (Tabs)",
+                        "description":  "Make each Ryb have a protrusion (tab) that goes into the backplane slot. The tab height must be exactly the thickness of the backplane material.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "rybs",
+                                       "cnc",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-027"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-029",
+                        "epic":  "EPIC-09",
+                        "title":  "Accurate Reference File Export",
+                        "description":  "Generate the total DXF using the new organic backplane and tabbed rybs to perfectly recreate the structure of the reference physical parts.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "export",
+                                       "cnc"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-028"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-030",
+                        "epic":  "EPIC-01",
+                        "title":  "Restore top-right shelf preview",
+                        "description":  "The main shelf preview in the top right was dropped, leaving only the single ryb preview overlay. Restore the full parametric shelf view.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "preview",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-031",
+                        "epic":  "EPIC-09",
+                        "title":  "Fix DXF backplane wave shape mismatch",
+                        "description":  "The wave contour produced in the DXF backplane does not reflect the interpolated wave shape configured in the website UI.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "backplane",
+                                       "export",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-032",
+                        "epic":  "EPIC-07",
+                        "title":  "Ensure Dogbone fillets are actually present in DXF",
+                        "description":  "Dogbone fillets aren\u0027t rendering in the exported DXF.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "cnc",
+                                       "backplane",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-033",
+                        "epic":  "EPIC-02",
+                        "title":  "Persistent 3D Camera State",
+                        "description":  "Camera orbit position is preserved during parameter edits using useFrame-based initialization logic.",
+                        "status":  "done",
+                        "priority":  "high",
+                        "labels":  [
+                                       "editor",
+                                       "camera"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-034",
+                        "epic":  "EPIC-02",
+                        "title":  "Custom Ryb Cycling in Single Editor",
+                        "description":  "Added navigation arrows to cycle through custom rybs in the single ryb editor.",
+                        "status":  "done",
+                        "priority":  "medium",
+                        "labels":  [
+                                       "editor",
+                                       "ux"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-035",
+                        "epic":  "EPIC-02",
+                        "title":  "Selected Rib Highlighting",
+                        "description":  "The custom ryb currently being edited is highlighted with an emissive material in the full shelf view.",
+                        "status":  "done",
+                        "priority":  "medium",
+                        "labels":  [
+                                       "editor",
+                                       "rendering"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-036",
+                        "epic":  "EPIC-10",
+                        "title":  "Fix keyframe highlighting (highlight designed rybs, not tweens)",
+                        "description":  "Map keyframe index to shelf position using t-parameter formula so the highlighted rib is the actual keyframe, not an interpolated tween.",
+                        "status":  "done",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "editor",
+                                       "bugfix"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-037",
+                        "epic":  "EPIC-10",
+                        "title":  "Freeform pen tool (add line/bezier segments)",
+                        "description":  "Add a pen tool to the CustomRybEditor that allows clicking to add line segments and dragging to create bezier curves.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "editor",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-038",
+                        "epic":  "EPIC-10",
+                        "title":  "Freeform delete tool (remove points/segments)",
+                        "description":  "Add a delete tool to remove individual points or entire curve segments from freeform ryb designs.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "editor",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-039",
+                        "epic":  "EPIC-10",
+                        "title":  "Freeform segment type conversion (line↔bezier)",
+                        "description":  "Allow converting between line and bezier segment types by clicking on a segment in the editor.",
+                        "status":  "todo",
+                        "priority":  "P2",
+                        "labels":  [
+                                       "editor",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-040",
+                        "epic":  "EPIC-11",
+                        "title":  "Rotation-aware slot width computation",
+                        "description":  "Compute backplane slot width from the projected cross-section of each rotated ryb onto the backplane plane.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "backplane",
+                                       "geometry"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-041",
+                        "epic":  "EPIC-11",
+                        "title":  "Freeform shape projected slot width",
+                        "description":  "Compute slot width for freeform shapes using convex hull projection.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "backplane",
+                                       "geometry"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-040"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-042",
+                        "epic":  "EPIC-11",
+                        "title":  "Backplane surface optimisation for ryb clearance",
+                        "description":  "Optimise backplane surface contour so all rybs exit cleanly regardless of shape/rotation.",
+                        "status":  "todo",
+                        "priority":  "P2",
+                        "labels":  [
+                                       "backplane",
+                                       "geometry"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-041"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-043",
+                        "epic":  "EPIC-11",
+                        "title":  "Slot width visual feedback in 3D preview",
+                        "description":  "Show computed slot widths and highlight too-narrow slots in red in the 3D editor.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "editor",
+                                       "rendering"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-040"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-044",
+                        "epic":  "EPIC-12",
+                        "title":  "Integrate Clerk auth (sign-in/up components)",
+                        "description":  "Add Clerk provider and prebuilt sign-in/sign-up components to the app.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "auth",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-045",
+                        "epic":  "EPIC-12",
+                        "title":  "Gate DXF/SVG download behind auth",
+                        "description":  "Wrap export download buttons in Clerk SignedIn/SignedOut to require authentication.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "auth",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-044"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-046",
+                        "epic":  "EPIC-12",
+                        "title":  "Admin role check for downloads",
+                        "description":  "Only users with admin role can download cut files. Uses Clerk publicMetadata.role.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "auth",
+                                       "rbac"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-045"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-047",
+                        "epic":  "EPIC-12",
+                        "title":  "Sign-in to download UX (non-intrusive)",
+                        "description":  "Show a friendly \u0027Sign in to download\u0027 prompt instead of hiding the export button.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "auth",
+                                       "ux"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-044"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-048",
+                        "epic":  "EPIC-13",
+                        "title":  "Stripe integration (Checkout Sessions)",
+                        "description":  "Integrate Stripe Checkout for shelf cut file purchases.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "payments",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-044"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-049",
+                        "epic":  "EPIC-13",
+                        "title":  "Payment success webhook handler",
+                        "description":  "Handle Stripe payment_intent.succeeded webhook to unlock DXF download.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "payments",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-048"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-050",
+                        "epic":  "EPIC-13",
+                        "title":  "Shelf config stored as order metadata",
+                        "description":  "Attach full shelf parameters to the Stripe checkout session metadata.",
+                        "status":  "todo",
+                        "priority":  "P1",
+                        "labels":  [
+                                       "payments",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-048"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-051",
+                        "epic":  "EPIC-13",
+                        "title":  "Feature-flagged Order button",
+                        "description":  "Add an Order button that is hidden behind a feature flag until payment flow is validated.",
+                        "status":  "todo",
+                        "priority":  "P0",
+                        "labels":  [
+                                       "payments",
+                                       "ux"
+                                   ],
+                        "dependencies":  [
+
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-052",
+                        "epic":  "EPIC-14",
+                        "title":  "Order data model (Supabase)",
+                        "description":  "Create orders table in Supabase with shelf config, payment status, and fulfilment tracking.",
+                        "status":  "todo",
+                        "priority":  "P2",
+                        "labels":  [
+                                       "orders",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-049"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-053",
+                        "epic":  "EPIC-14",
+                        "title":  "Admin order dashboard page",
+                        "description":  "Internal admin page to view orders, statuses, and DXF files.",
+                        "status":  "todo",
+                        "priority":  "P2",
+                        "labels":  [
+                                       "orders",
+                                       "admin"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-052"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-054",
+                        "epic":  "EPIC-14",
+                        "title":  "Manufacturing partner API integration",
+                        "description":  "Integrate with SendCutSend/Xometry/Ponoko API to submit DXF files for CNC cutting.",
+                        "status":  "todo",
+                        "priority":  "P3",
+                        "labels":  [
+                                       "fulfilment",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-052"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-055",
+                        "epic":  "EPIC-14",
+                        "title":  "Shipping tracking integration",
+                        "description":  "Integrate with ShipStation or AfterShip to provide order tracking to customers.",
+                        "status":  "todo",
+                        "priority":  "P3",
+                        "labels":  [
+                                       "fulfilment",
+                                       "feature"
+                                   ],
+                        "dependencies":  [
+                                             "RYB-054"
+                                         ]
+                    },
+                    {
+                        "id":  "RYB-084",
+                        "epic":  "EPIC-22",
+                        "labels":  [
+                                       "editor",
+                                       "mobile"
+                                   ],
+                        "description":  "Implement tap to select, swipe to pan, pinch to zoom, and two-finger swipe to rotate.",
+                        "priority":  "high",
+                        "title":  "Intuitive Touch Gestures for 3D Navigation",
+                        "status":  "todo"
+                    },
+                    {
+                        "id":  "RYB-085",
+                        "epic":  "EPIC-22",
+                        "labels":  [
+                                       "editor",
+                                       "mobile"
+                                   ],
+                        "description":  "Implement a 3D bubble cursor or progressive refinement menu for dense 3D environments on small screens.",
+                        "priority":  "high",
+                        "title":  "Direct Object Selection \u0026 Progressive Refinement",
+                        "status":  "todo"
+                    },
+                    {
+                        "id":  "RYB-086",
+                        "epic":  "EPIC-22",
+                        "labels":  [
+                                       "editor",
+                                       "mobile"
+                                   ],
+                        "description":  "Eliminate long lists of \u0027x\u0027 buttons. Implement gesture-based deletion (swipe to delete) and ensure minimum 10mm touch targets.",
+                        "priority":  "P0",
+                        "title":  "Ergonomic Node Deletion \u0026 Management",
+                        "status":  "todo"
+                    },
+                    {
+                        "id":  "RYB-087",
+                        "epic":  "EPIC-23",
+                        "labels":  [
+                                       "upload",
+                                       "3d"
+                                   ],
+                        "description":  "Automatically detect and correct left-handed/right-handed and Y-up/Z-up mismatches upon 3D upload.",
+                        "priority":  "medium",
+                        "title":  "Automated Coordinate System Translation",
+                        "status":  "todo"
+                    },
+                    {
+                        "id":  "RYB-088",
+                        "epic":  "EPIC-23",
+                        "labels":  [
+                                       "upload",
+                                       "ux"
+                                   ],
+                        "description":  "Provide real-time 3D preview and dynamic viewport scaling to ensure uploaded objects fit on screen.",
+                        "priority":  "medium",
+                        "title":  "Immediate Visual Validation",
+                        "status":  "todo"
+                    },
+                    {
+                        "id":  "RYB-089",
+                        "epic":  "EPIC-24",
+                        "labels":  [
+                                       "ux",
+                                       "mobile"
+                                   ],
+                        "description":  "Implement a bottom navigation bar for primary tools and a FAB for uploads on mobile.",
+                        "priority":  "high",
+                        "title":  "Streamlined Mobile Navigation Elements",
+                        "status":  "todo"
+                    },
+                    {
+                        "id":  "RYB-090",
+                        "epic":  "EPIC-24",
+                        "labels":  [
+                                       "ux",
+                                       "editor"
+                                   ],
+                        "description":  "Regroup parameters logically, provide adaptive feedback based on selection, and add constrained manipulation.",
+                        "priority":  "medium",
+                        "title":  "Cognitive Load Reduction in Editor Menus",
+                        "status":  "todo"
+                    }
+                ]
+}

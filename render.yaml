@@ -59,7 +59,7 @@ services:
     headers:
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; script-src 'self' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://js.stripe.com; connect-src 'self' https://*.supabase.co https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://api.stripe.com wss://*.clerk.dev; worker-src 'self' blob:; img-src 'self' data: blob: https://*.stripe.com https://img.clerk.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com; object-src 'none';"
+        value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://js.stripe.com; connect-src 'self' https://*.supabase.co https://*.clerk.accounts.dev https://*.clerk.dev https://clerk.rybform.com https://api.stripe.com wss://*.clerk.dev; worker-src 'self' blob:; img-src 'self' data: blob: https://*.stripe.com https://img.clerk.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; frame-src https://js.stripe.com; object-src 'none';"
       - path: /*
         name: X-Content-Type-Options
         value: nosniff

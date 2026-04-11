@@ -1,0 +1,255 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - navigation [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: P
+        - generic [ref=e8]: Rybform
+      - generic [ref=e9]:
+        - button "Designer" [ref=e10]
+        - button "Sign In" [ref=e11]
+  - main [ref=e12]:
+    - generic [ref=e15]:
+      - paragraph [ref=e16]: Ryb-Based Design
+      - heading "Shape by shape, ryb by ryb" [level=1] [ref=e17]:
+        - text: Shape by shape,
+        - generic [ref=e18]: ryb by ryb
+      - paragraph [ref=e19]: Explore the beauty of parametric architecture. Real-time 3D generation for CNC fabrication.
+    - generic [ref=e30]:
+      - generic [ref=e31]:
+        - heading "Designer" [level=2] [ref=e32]
+        - paragraph [ref=e33]: Studio for Parametric Generative Design
+      - generic [ref=e34]:
+        - complementary [ref=e35]:
+          - generic [ref=e36]:
+            - heading "3D Shape Integration" [level=3] [ref=e37]:
+              - img [ref=e38]
+              - text: 3D Shape Integration
+            - generic [ref=e44] [cursor=pointer]:
+              - paragraph [ref=e45]: Upload 3D Mesh
+              - paragraph [ref=e46]: STL or OBJ
+          - generic [ref=e47]:
+            - heading "Measurement System" [level=3] [ref=e48]
+            - generic [ref=e49]:
+              - button "Metric (mm)" [ref=e50]
+              - button "Imperial (in)" [ref=e51]
+        - generic [ref=e52]:
+          - generic [ref=e54]:
+            - generic [ref=e55]:
+              - heading "Single Ryb Editor" [level=3] [ref=e57]
+              - generic [ref=e58]:
+                - generic [ref=e59]:
+                  - button "3D" [ref=e60]
+                  - button "Top" [ref=e61]
+                  - button "Front" [ref=e62]
+                  - button "Side" [ref=e63]
+                  - button "↺" [ref=e64]
+                - button "⤢" [ref=e65]
+            - generic [ref=e71]:
+              - generic [ref=e72]:
+                - generic [ref=e73]:
+                  - generic [ref=e74]: X (Width) (Physical)
+                  - generic [ref=e75]:
+                    - spinbutton [ref=e76]: "150"
+                    - combobox [ref=e77]:
+                      - option "in"
+                      - option "mm" [selected]
+                  - generic [ref=e78]: X (Width) Factor
+                  - slider [ref=e79] [cursor=pointer]: "1"
+                  - generic [ref=e80]: 1.00x
+                - generic [ref=e81]:
+                  - generic [ref=e82]: Y (Height) (Physical)
+                  - generic [ref=e83]:
+                    - spinbutton [ref=e84]: "150"
+                    - combobox [ref=e85]:
+                      - option "in"
+                      - option "mm" [selected]
+                  - generic [ref=e86]: Y (Height) Factor
+                  - slider [ref=e87] [cursor=pointer]: "1"
+                  - generic [ref=e88]: 1.00x
+                - generic [ref=e89]:
+                  - generic [ref=e90]: Z (Depth) (Physical)
+                  - generic [ref=e91]:
+                    - spinbutton [ref=e92]: "10"
+                    - combobox [ref=e93]:
+                      - option "in"
+                      - option "mm" [selected]
+                  - generic [ref=e94]: Z (Depth) Factor
+                  - slider [ref=e95] [cursor=pointer]: "1"
+                  - generic [ref=e96]: 1.00x
+              - generic [ref=e97]:
+                - generic [ref=e98]:
+                  - generic [ref=e99]: Rotate X°
+                  - slider [ref=e100] [cursor=pointer]: "180"
+                  - generic [ref=e101]: 180°
+                - generic [ref=e102]:
+                  - generic [ref=e103]: Rotate Y°
+                  - slider [ref=e104] [cursor=pointer]: "-90"
+                  - generic [ref=e105]: "-90°"
+                - generic [ref=e106]:
+                  - generic [ref=e107]: Rotate Z°
+                  - slider [ref=e108] [cursor=pointer]: "0"
+                  - generic [ref=e109]: 0°
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - generic [ref=e112]:
+                - heading "Shelf Dimensions" [level=3] [ref=e113]
+                - generic [ref=e114]:
+                  - generic [ref=e115]:
+                    - generic [ref=e116]: Length (X)
+                    - generic [ref=e117]:
+                      - spinbutton [ref=e118]: "48"
+                      - combobox [ref=e119]:
+                        - option "in" [selected]
+                        - option "mm"
+                  - generic [ref=e120]:
+                    - generic [ref=e121]: Wave Height (Y)
+                    - generic [ref=e122]:
+                      - spinbutton [ref=e123]: "24"
+                      - combobox [ref=e124]:
+                        - option "in" [selected]
+                        - option "mm"
+              - generic [ref=e125]:
+                - heading "Ryb Shape" [level=3] [ref=e126]
+                - generic [ref=e127]:
+                  - button "◼️ Square" [ref=e128]:
+                    - generic [ref=e129]: ◼️
+                    - text: Square
+                  - button "⚪ Circle" [ref=e130]:
+                    - generic [ref=e131]: ⚪
+                    - text: Circle
+                  - button "▬ Rectangle" [ref=e132]:
+                    - generic [ref=e133]: ▬
+                    - text: Rectangle
+                  - button "✏️ Freeform" [ref=e134]:
+                    - generic [ref=e135]: ✏️
+                    - text: Freeform
+                - generic [ref=e137] [cursor=pointer]:
+                  - checkbox "Flat Back Edge ← Wall side (right in preview)" [checked] [ref=e138]
+                  - generic [ref=e139]:
+                    - text: Flat Back Edge
+                    - paragraph [ref=e140]: ← Wall side (right in preview)
+              - generic [ref=e141]:
+                - heading "Material" [level=3] [ref=e142]
+                - generic [ref=e143]:
+                  - button "Premium MDF $45" [ref=e144]:
+                    - generic [ref=e145]:
+                      - generic [ref=e147]: Premium MDF
+                      - generic [ref=e148]: $45
+                  - button "Birch Plywood $65" [ref=e149]:
+                    - generic [ref=e150]:
+                      - generic [ref=e152]: Birch Plywood
+                      - generic [ref=e153]: $65
+                  - button "Walnut Plywood $85" [ref=e154]:
+                    - generic [ref=e155]:
+                      - generic [ref=e157]: Walnut Plywood
+                      - generic [ref=e158]: $85
+                  - button "White PVC $55" [ref=e159]:
+                    - generic [ref=e160]:
+                      - generic [ref=e162]: White PVC
+                      - generic [ref=e163]: $55
+              - button "⚙️ Developer Parameters" [ref=e166]:
+                - generic [ref=e167]: ⚙️
+                - text: Developer Parameters
+            - generic [ref=e169]:
+              - generic [ref=e170]:
+                - heading "Full Ryb Editor" [level=3] [ref=e171]
+                - generic [ref=e172]:
+                  - generic [ref=e173]:
+                    - button "🌙" [ref=e174]
+                    - button "3D" [ref=e175]
+                    - button "Top" [ref=e176]
+                    - button "Front" [ref=e177]
+                    - button "Side" [ref=e178]
+                    - button "↺" [ref=e179]
+                  - button "⤢" [ref=e180]
+              - generic [ref=e184]:
+                - generic [ref=e185]:
+                  - paragraph [ref=e186]: "2"
+                  - paragraph [ref=e187]: Sheets
+                - generic [ref=e188]:
+                  - paragraph [ref=e189]: 72%
+                  - paragraph [ref=e190]: Efficiency
+                - generic [ref=e191]:
+                  - paragraph [ref=e192]: "10"
+                  - paragraph [ref=e193]: Rybs
+            - generic [ref=e194]:
+              - generic [ref=e195]:
+                - heading "Wave Path" [level=3] [ref=e196]
+                - generic [ref=e197]:
+                  - button "〰️Gentle Wave" [ref=e198]
+                  - button "🌊Steep Wave" [ref=e199]
+                  - button "▬Flat Shelf" [ref=e200]
+                  - button "🌿Organic" [ref=e201]
+                - generic [ref=e202]:
+                  - generic [ref=e203]:
+                    - generic [ref=e204]:
+                      - generic [ref=e205]: Ryb Count
+                      - generic [ref=e206]: "10"
+                    - slider [ref=e207] [cursor=pointer]: "10"
+                  - generic [ref=e208]:
+                    - generic [ref=e209]:
+                      - generic [ref=e210]: Spacing
+                      - generic [ref=e211]: 135mm
+                    - slider [ref=e212] [cursor=pointer]: "135"
+                  - generic [ref=e213]:
+                    - generic [ref=e214]:
+                      - generic [ref=e215]: Wave Amplitude
+                      - generic [ref=e216]: 2"
+                    - slider [ref=e217] [cursor=pointer]: "2"
+                  - generic [ref=e218]:
+                    - generic [ref=e219]:
+                      - generic [ref=e220]: Frequency
+                      - generic [ref=e221]: "1.5"
+                    - slider [ref=e222] [cursor=pointer]: "1.5"
+              - generic [ref=e223]:
+                - heading "Size Transform" [level=3] [ref=e224]
+                - paragraph [ref=e225]: Scale rybs along path
+                - generic [ref=e226]:
+                  - generic [ref=e227]:
+                    - generic [ref=e228]: Start
+                    - spinbutton [ref=e229]: "1"
+                  - generic [ref=e230]:
+                    - generic [ref=e231]: End
+                    - spinbutton [ref=e232]: "1"
+              - generic [ref=e233]:
+                - heading "Backplane" [level=3] [ref=e234]
+                - generic [ref=e235]:
+                  - generic [ref=e236] [cursor=pointer]:
+                    - checkbox "Enable Backplane" [checked] [ref=e237]
+                    - generic [ref=e238]: Enable Backplane
+                  - generic [ref=e239]:
+                    - generic [ref=e241]: Shape
+                    - combobox [ref=e242]:
+                      - option "Rectangular" [selected]
+                      - option "Organic Wave"
+                  - generic [ref=e243]:
+                    - generic [ref=e244]:
+                      - generic [ref=e245]: Material Thickness
+                      - generic [ref=e246]: 12mm
+                    - slider [ref=e247] [cursor=pointer]: "12"
+                  - generic [ref=e248]:
+                    - generic [ref=e249]:
+                      - generic [ref=e250]: Slot Depth
+                      - generic [ref=e251]: 60mm
+                    - slider [ref=e252] [cursor=pointer]: "60"
+                  - generic [ref=e253]:
+                    - generic [ref=e254]:
+                      - generic [ref=e255]: Dogbone Radius
+                      - generic [ref=e256]: 3.5mm
+                    - slider [ref=e257] [cursor=pointer]: "3.5"
+                    - paragraph [ref=e258]: CNC bit clearance fillet
+    - generic [ref=e261]:
+      - generic [ref=e262]:
+        - paragraph [ref=e263]: $165
+        - paragraph [ref=e264]: 48in × 24in • 10 square rybs
+      - button "Sign in to Export" [ref=e265]
+  - contentinfo [ref=e266]:
+    - generic [ref=e267]:
+      - generic [ref=e268]:
+        - generic [ref=e269]: R
+        - generic [ref=e270]: Rybform
+      - paragraph [ref=e271]: Parametric rib-based furniture
+```
