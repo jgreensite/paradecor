@@ -32,6 +32,8 @@ dist-ssr
 
 # Test output
 test-output/
+playwright-report/
+test-results/
 
 # Analysis artifacts
 examples/dxf_analysis.json
