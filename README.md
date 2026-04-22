@@ -43,6 +43,14 @@ npm run dev
 - **Type Checking**: `npx tsc --noEmit`
 - **Architecture Validation**: `npx depcruise src --output-type err-long`
 
+## Work Tracking
+
+Linear is the authoritative source of truth for live epics, features, stories, priorities, and status.
+
+- Use the local `bootstrapLocal` MCP route for repo-scoped Linear work.
+- Repo routing is pinned in `.repo-integrations.json` so agents do not guess the Linear project from UI state or repo name.
+- Historical architectural decisions stay in `docs/adr/`; live backlog state does not.
+
 ## 🏗️ Architecture
 This project follows the **Ports and Adapters (Hexagonal Architecture)** pattern.
 - `src/core/domain`: Pure business logic and geometry algorithms.

@@ -17,3 +17,8 @@ This document outlines the architectural boundaries established during our ARB r
 
 ## Enforcement
 This boundary rule is strictly enforced by `dependency-cruiser` in the root configuration (`.dependency-cruiser.cjs`). Do not bypass constraints or add explicit Ignore exceptions unless approved by the CAB.
+
+## Work Tracking Boundary
+- Live work tracking belongs in Linear, not in committed JSON backlog files.
+- Repo-scoped Linear reads and writes should go through the local `bootstrapLocal` MCP route.
+- The repo-local routing contract for that flow is `.repo-integrations.json`.
