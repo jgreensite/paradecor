@@ -18,12 +18,12 @@ test.describe('Authentication Gate', () => {
     await expect(page.getByRole('navigation').getByText('Sign In', { exact: true })).toBeVisible({ timeout: 15000 });
   });
 
-  test('Unauthenticated user sees "Sign in to Export" CTA in the pricing section', async ({ page }) => {
+  test('Unauthenticated user sees Buy Now CTA in the pricing section', async ({ page }) => {
     await gotoHome(page);
-    // The pricing section shows "Sign in to Export" for unauthenticated users
-    await expect(page.getByRole('button', { name: 'Sign in to Export' })).toBeVisible({ timeout: 15000 });
-    // Admin-only "Export & Order" button should NOT be visible
-    await expect(page.getByText('Export & Order', { exact: true })).not.toBeVisible();
+    // The pricing section shows checkout CTA for non-admin users.
+    await expect(page.getByRole('button', { name: 'Buy Now' })).toBeVisible({ timeout: 15000 });
+    // Admin-only production export controls should NOT be visible.
+    await expect(page.getByText('Export Production Files (Admin)', { exact: true })).not.toBeVisible();
   });
 
 });
