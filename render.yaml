@@ -13,6 +13,8 @@ services:
       generation: automatic
     buildFilter:
       paths:
+        - .repo-integrations.json
+        - render.yaml
         - server/**
         - package.json
         - package-lock.json
@@ -43,6 +45,8 @@ services:
       generation: automatic
     buildFilter:
       paths:
+        - .repo-integrations.json
+        - render.yaml
         - src/**
         - public/**
         - index.html
