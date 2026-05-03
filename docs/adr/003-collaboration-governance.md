@@ -18,7 +18,8 @@ We will strictly adhere to the following "Keep/Remove" governance model for all 
 
 | Asset Type | Current Best Practice (KEEP) | Deprecated/Anti-Pattern (REMOVE) |
 |---|---|---|
-| **Work Tracking** | **Linear** — The authoritative source for all epics, features, stories, priorities, and sprints. Use the MCP server to sync. | **`docs/backlog.json`** — Deleted. Manual JSON tracking is forbidden as it diverges from Linear automatically. |
+| **Work Tracking** | **Linear** — The authoritative source for all epics, features, stories, priorities, and sprints. Use `bootstrapLocal` for repo-scoped sync. | **`docs/backlog.json`** — Deleted. Manual JSON tracking is forbidden as it diverges from Linear automatically. |
+| **Routing Contract** | **`.repo-integrations.json`** — Explicit repo-local routing for `bootstrapLocal` Linear actions. | Guessing project routing from repo name, UI state, or fuzzy search. |
 | **Architecture** | **`docs/adr/`** — Version-controlled records of *why* specific engineering decisions were made (e.g., Hexagonal Architecture). | n/a |
 | **Operations** | **`docs/runbooks/`** — Step-by-step guides for deployment, secret rotation, and incident response. | Loose markdown instructions scattered in session logs. |
 | **Session Data** | **Ephemeral context** — Artifacts in `.gemini/brain/` describe the currently active session or complex research. | Permanent storage of "Implementation Plans" in the project root after the task is finished. |
@@ -27,7 +28,7 @@ We will strictly adhere to the following "Keep/Remove" governance model for all 
 ## Consequences
 
 ✅ Reduced context window bloat for AI agents  
-✅ Single source of truth for humans and agents via Linear MCP  
+✅ Single source of truth for humans and agents via Linear routed through `bootstrapLocal`  
 ✅ Permanent records are restricted to high-value architectural and operational documentation  
 ✅ The workspace remains clean and professional, suitable for due diligence at any time  
 
@@ -35,6 +36,7 @@ We will strictly adhere to the following "Keep/Remove" governance model for all 
 
 **Memory Record**:  
 - **Linear**: Issues, sprints, priorities  
+- **`.repo-integrations.json`**: Repo-local Linear routing contract  
 - **docs/adr/**: Architectural reasoning  
 - **docs/runbooks/**: Operational procedures  
 - **DELETED**: `docs/backlog.json`  

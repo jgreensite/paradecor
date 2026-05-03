@@ -35,6 +35,7 @@ import {
   calculateSheetsNeeded,
   DEFAULT_SHELF_PARAMS,
 } from '../../../hooks/useDesignerState'
+import { getCurvePoints, getAllPointsFromRyb } from '../../../utils/geometry'
 
 // ─── Bounding box helpers (still pure, tested inline) ─────────────────────────
 // These drive camera positioning (ZoomToFit) — locked separately until extracted.
@@ -55,36 +56,7 @@ function calculateRibBoundingBox(params: ShelfParams) {
   return { width: widthMM, height: heightMM, depth: depthMM }
 }
 
-// ─── Curve pipeline (still in App.tsx — locked until RYB-114) ─────────────────
-
-function getCurvePoints(segment: CurveSegment, resolution = 20): { x: number; y: number }[] {
-  const points: { x: number; y: number }[] = []
-  if (segment.type === 'line') {
-    points.push(segment.start, segment.end)
-  } else if (segment.type === 'bezier' && segment.control1 && segment.control2) {
-    for (let i = 0; i <= resolution; i++) {
-      const t = i / resolution
-      const x =
-        Math.pow(1 - t, 3) * segment.start.x +
-        3 * Math.pow(1 - t, 2) * t * segment.control1.x +
-        3 * (1 - t) * Math.pow(t, 2) * segment.control2.x +
-        Math.pow(t, 3) * segment.end.x
-      const y =
-        Math.pow(1 - t, 3) * segment.start.y +
-        3 * Math.pow(1 - t, 2) * t * segment.control1.y +
-        3 * (1 - t) * Math.pow(t, 2) * segment.control2.y +
-        Math.pow(t, 3) * segment.end.y
-      points.push({ x, y })
-    }
-  }
-  return points
-}
-
-function getAllPointsFromRyb(ryb: CustomRyb): { x: number; y: number }[] {
-  const allPoints: { x: number; y: number }[] = []
-  ryb.segments.forEach(seg => { allPoints.push(...getCurvePoints(seg)) })
-  return allPoints
-}
+// ─── Curve pipeline (shared geometry helpers) ─────────────────────────────────
 
 /** Pure keyframe→shelf index function matching the useCallback in App.tsx */
 function keyframeToShelfIndex(keyframeIdx: number, keyframeCount: number, ribCount: number): number | undefined {
